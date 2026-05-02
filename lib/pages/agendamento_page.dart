@@ -123,12 +123,40 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
         'clienteId': nome,
         'whatsapp': whatsapp,
         'servico': novo.idServico,
+        'valor': servicosSelecionados.isNotEmpty
+            ? (servicosSelecionados.first['valor'] as num).toDouble()
+            : 0.0,
         'profissionalId': novo.idProfissional,
         'dataHora': novo.dataHora,
         'status': novo.status,
         'minutos': novo.dataHora.hour * 60 + novo.dataHora.minute,
         'duracaoTotalMinutos': duracaoTotalMinutos,
         'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // 🔥 Salvar/atualizar cliente (evita duplicado pelo telefone)
+      await FirebaseFirestore.instance
+          .collection('tenants')
+          .doc(tenantId)
+          .collection('clientes')
+          .doc(whatsapp)
+          .set({
+        'nome': nome,
+        'telefone': whatsapp,
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      await FirebaseFirestore.instance
+          .collection('tenants')
+          .doc(tenantId)
+          .collection('financeiro_cache')
+          .add({
+        'valor': servicosSelecionados.isNotEmpty
+            ? (servicosSelecionados.first['valor'] as num).toDouble()
+            : 0.0,
+        'clienteNome': nome,
+        'servico': servicoNome,
+        'data': FieldValue.serverTimestamp(),
       });
   @override
   void dispose() {
@@ -302,15 +330,25 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBodyBehindAppBar: true,
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text(
-          'Horyx Salão',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        backgroundColor: Colors.black,
+        backgroundColor: Colors.transparent,
         centerTitle: true,
-        elevation: 4,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        iconTheme: const IconThemeData(color: Colors.black),
+        title: Image.asset(
+          'assets/horix2.png',
+          height: 80,
+          fit: BoxFit.contain,
+        ),
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.85),
+          ),
+        ),
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: getEmpresaStream(),
@@ -330,6 +368,7 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
           final logoUrl = data?['fotoUrl'] ?? '';
 
           return SingleChildScrollView(
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -661,7 +700,156 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                       ),
                     ),
                     InkWell(
-                      onTap: () {},
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                          ),
+                          builder: (_) {
+                            return FractionallySizedBox(
+                              heightFactor: 0.9,
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                color: Colors.white,
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Center(
+                                      child: Container(
+                                        width: 40,
+                                        height: 5,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[300],
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 15),
+                                    Row(
+                                      children: [
+                                        const Text(
+                                          "Marketplace",
+                                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          nome,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          Icons.verified,
+                                          color: Colors.blue,
+                                          size: 18,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Expanded(
+                                      child: StreamBuilder<QuerySnapshot>(
+                                        stream: FirebaseFirestore.instance
+                                            .collection('tenants')
+                                            .doc(tenantId)
+                                            .collection('marketplace')
+                                            .doc('produtos')
+                                            .collection('items')
+                                            .orderBy('createdAt', descending: true)
+                                            .snapshots(),
+                                        builder: (context, snapshot) {
+                                          if (!snapshot.hasData) {
+                                            return const Center(child: CircularProgressIndicator());
+                                          }
+
+                                          final docs = snapshot.data!.docs;
+
+                                          if (docs.isEmpty) {
+                                            return const Center(
+                                              child: Text("Nenhum produto cadastrado"),
+                                            );
+                                          }
+
+                                          return ListView.builder(
+                                            itemCount: docs.length,
+                                            itemBuilder: (context, index) {
+                                              final data = docs[index].data() as Map<String, dynamic>;
+
+                                              final nome = data['nome'] ?? '';
+                                              final descricao = data['descricao'] ?? '';
+                                              final valor = data['valor'] ?? 0;
+                                              final fotoUrl = data['fotoUrl'] ?? '';
+
+                                              return Container(
+                                                margin: const EdgeInsets.only(bottom: 12),
+                                                padding: const EdgeInsets.all(12),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey[100],
+                                                  borderRadius: BorderRadius.circular(14),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Container(
+                                                      width: 60,
+                                                      height: 60,
+                                                      decoration: BoxDecoration(
+                                                        borderRadius: BorderRadius.circular(10),
+                                                        image: fotoUrl.isNotEmpty
+                                                            ? DecorationImage(
+                                                                image: NetworkImage(fotoUrl),
+                                                                fit: BoxFit.cover,
+                                                              )
+                                                            : null,
+                                                        color: Colors.grey[300],
+                                                      ),
+                                                      child: fotoUrl.isEmpty
+                                                          ? const Icon(Icons.image)
+                                                          : null,
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(
+                                                            nome,
+                                                            style: const TextStyle(fontWeight: FontWeight.bold),
+                                                          ),
+                                                          Text(
+                                                            descricao,
+                                                            maxLines: 2,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      "R\$ $valor",
+                                                      style: const TextStyle(
+                                                        fontWeight: FontWeight.bold,
+                                                        color: Colors.green,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
@@ -879,6 +1067,7 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                                   'id': docs[index].id,
                                   'nome': nome,
                                   'duracao': duracao,
+                                  'valor': valor,
                                 });
                               }
                             });
@@ -974,241 +1163,285 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                     );
                   },
                 ),
-                const SizedBox(height: 20),
 
                 Padding(
                   padding: const EdgeInsets.all(20),
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      onPressed: servicosSelecionados.isEmpty || profissionalSelecionadoId == null
-                          ? null
-                          : () {
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                                ),
-                                builder: (_) {
-                                  return FractionallySizedBox(
-                                    heightFactor: 0.85,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(20),
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Center(
-                                            child: Container(
-                                              width: 40,
-                                              height: 5,
-                                              decoration: BoxDecoration(
-                                                color: Colors.grey[300],
-                                                borderRadius: BorderRadius.circular(10),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(height: 15),
-                                          const Text(
-                                            "Escolha o horário",
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 10),
-
-                                          Row(
-                                            children: [
-                                              CircleAvatar(
-                                                radius: 18,
-                                                backgroundImage: (profissionalSelecionadoFoto != null &&
-                                                        profissionalSelecionadoFoto!.isNotEmpty)
-                                                    ? NetworkImage(profissionalSelecionadoFoto!)
-                                                    : null,
-                                                child: (profissionalSelecionadoFoto == null ||
-                                                        profissionalSelecionadoFoto!.isEmpty)
-                                                    ? const Icon(Icons.person, size: 18)
-                                                    : null,
-                                              ),
-                                              const SizedBox(width: 10),
-                                              Text(
-                                                "Profissional: ${profissionalSelecionadoNome ?? ''}",
-                                                style: const TextStyle(fontWeight: FontWeight.w600),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 5),
-
-                                          Text(
-                                            "Serviços: ${servicosSelecionados.map((s) => s['nome']).join(', ')}",
-                                            style: const TextStyle(color: Colors.grey),
-                                          ),
-
-                                          const SizedBox(height: 20),
-
-                                          Expanded(
-                                            child: StatefulBuilder(
-                                              builder: (context, setModalState) {
-                                                return StreamBuilder<List<String>>(
-                                                  key: ValueKey(profissionalSelecionadoId),
-                                                  stream: _getHorariosDisponiveis(),
-                                                  builder: (context, snapshot) {
-                                                    print("StreamBuilder horários rebuild → profissional: $profissionalSelecionadoId");
-                                                    if (!snapshot.hasData) {
-                                                      return const Center(child: CircularProgressIndicator());
-                                                    }
-
-                                                    final horarios = snapshot.data!;
-
-                                                    if (horarios.isEmpty) {
-                                                      return const Center(child: Text("Sem horários disponíveis"));
-                                                    }
-
-                                                    return GridView.builder(
-                                                      itemCount: horarios.length,
-                                                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                                        crossAxisCount: 4,
-                                                        mainAxisSpacing: 10,
-                                                        crossAxisSpacing: 10,
-                                                        childAspectRatio: 2.5,
-                                                      ),
-                                                      itemBuilder: (context, index) {
-                                                        final horario = horarios[index];
-                                                        final isSelected = horario == _horarioSelecionado;
-
-                                                        return GestureDetector(
-                                                          onTap: () {
-                                                            setModalState(() {
-                                                              _horarioSelecionado = horario;
-                                                            });
-                                                          },
-                                                          child: AnimatedContainer(
-                                                            duration: const Duration(milliseconds: 200),
-                                                            alignment: Alignment.center,
-                                                            decoration: BoxDecoration(
-                                                              color: isSelected ? Colors.blue : Colors.grey[200],
-                                                              borderRadius: BorderRadius.circular(20),
-                                                            ),
-                                                            child: Text(
-                                                              horario,
-                                                              style: TextStyle(
-                                                                color: isSelected ? Colors.white : Colors.black,
-                                                                fontWeight: FontWeight.w500,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        );
-                                                      },
-                                                    );
-                                                  },
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                          const SizedBox(height: 0),
-
-                                          const Text(
-                                            "Informações pessoais",
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-
-                                          const SizedBox(height: 4),
-                                          const Divider(height: 8),
-
-                                          Container(
-                                            padding: const EdgeInsets.all(10),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey.shade100,
-                                              borderRadius: BorderRadius.circular(16),
-                                              border: Border.all(color: Colors.grey.shade300),
-                                            ),
-                                            child: Column(
-                                              children: [
-                                                TextField(
-                                                  controller: nomeController,
-                                                  decoration: InputDecoration(
-                                                    labelText: "Seu nome",
-                                                    prefixIcon: const Icon(Icons.person),
-                                                    filled: true,
-                                                    fillColor: Colors.white,
-                                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                                    border: OutlineInputBorder(
-                                                      borderRadius: BorderRadius.circular(12),
-                                                      borderSide: BorderSide.none,
-                                                    ),
-                                                  ),
+                  child: Align(
+                    alignment: Alignment.center,
+                    child: SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.85,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                        ),
+                        onPressed: servicosSelecionados.isEmpty || profissionalSelecionadoId == null
+                            ? null
+                            : () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                                  ),
+                                  builder: (_) {
+                                    return FractionallySizedBox(
+                                      heightFactor: 0.85,
+                                      child: Container(
+                                        padding: const EdgeInsets.all(20),
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Center(
+                                              child: Container(
+                                                width: 40,
+                                                height: 5,
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey[300],
+                                                  borderRadius: BorderRadius.circular(10),
                                                 ),
+                                              ),
+                                            ),
+                                            const SizedBox(height: 15),
+                                            const Text(
+                                              "Escolha o horário",
+                                              style: TextStyle(
+                                                fontSize: 18,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 10),
 
-                                                const SizedBox(height: 10),
-
-                                                TextField(
-                                                  controller: whatsappController,
-                                                  keyboardType: TextInputType.phone,
-                                                  decoration: InputDecoration(
-                                                    labelText: "WhatsApp",
-                                                    prefixIcon: const Icon(Icons.phone),
-                                                    filled: true,
-                                                    fillColor: Colors.white,
-                                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                                                    border: OutlineInputBorder(
-                                                      borderRadius: BorderRadius.circular(12),
-                                                      borderSide: BorderSide.none,
-                                                    ),
-                                                  ),
+                                            Row(
+                                              children: [
+                                                CircleAvatar(
+                                                  radius: 18,
+                                                  backgroundImage: (profissionalSelecionadoFoto != null &&
+                                                          profissionalSelecionadoFoto!.isNotEmpty)
+                                                      ? NetworkImage(profissionalSelecionadoFoto!)
+                                                      : null,
+                                                  child: (profissionalSelecionadoFoto == null ||
+                                                          profissionalSelecionadoFoto!.isEmpty)
+                                                      ? const Icon(Icons.person, size: 18)
+                                                      : null,
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Text(
+                                                  "Profissional: ${profissionalSelecionadoNome ?? ''}",
+                                                  style: const TextStyle(fontWeight: FontWeight.w600),
                                                 ),
                                               ],
                                             ),
-                                          ),
-                                          const SizedBox(height: 25),
-                                          SizedBox(
-                                            width: double.infinity,
-                                            child: ElevatedButton(
-                                              style: ElevatedButton.styleFrom(
-                                                backgroundColor: Colors.black,
-                                                padding: const EdgeInsets.symmetric(vertical: 16),
-                                              ),
-                                              onPressed: () {
-                                                if (_horarioSelecionado == null) return;
-                                                final partes = _horarioSelecionado!.split(':');
-                                                final now = DateTime.now();
+                                            const SizedBox(height: 5),
 
-                                                final dataFinal = DateTime(
-                                                  now.year,
-                                                  now.month,
-                                                  now.day,
-                                                  int.parse(partes[0]),
-                                                  int.parse(partes[1]),
-                                                );
-
-                                                _salvarAgendamento(
-                                                  servicosSelecionados.map((s) => s['nome']).join(', '),
-                                                  dataFinal,
-                                                  nomeController.text,
-                                                  whatsappController.text,
-                                                );
-
-                                                Navigator.pop(context);
-                                              },
-                                              child: const Text("Finalizar agendamento"),
+                                            Text(
+                                              "Serviços: ${servicosSelecionados.map((s) => s['nome']).join(', ')}",
+                                              style: const TextStyle(color: Colors.grey),
                                             ),
-                                          ),
-                                        ],
+
+                                            const SizedBox(height: 20),
+
+                                            Expanded(
+                                              child: StatefulBuilder(
+                                                builder: (context, setModalState) {
+                                                  return StreamBuilder<List<String>>(
+                                                    key: ValueKey(profissionalSelecionadoId),
+                                                    stream: _getHorariosDisponiveis(),
+                                                    builder: (context, snapshot) {
+                                                      print("StreamBuilder horários rebuild → profissional: $profissionalSelecionadoId");
+                                                      if (!snapshot.hasData) {
+                                                        return const Center(child: CircularProgressIndicator());
+                                                      }
+
+                                                      final horarios = snapshot.data!;
+
+                                                      if (horarios.isEmpty) {
+                                                        return const Center(child: Text("Sem horários disponíveis"));
+                                                      }
+
+                                                      return GridView.builder(
+                                                        itemCount: horarios.length,
+                                                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                                          crossAxisCount: 4,
+                                                          mainAxisSpacing: 10,
+                                                          crossAxisSpacing: 10,
+                                                          childAspectRatio: 2.5,
+                                                        ),
+                                                        itemBuilder: (context, index) {
+                                                          final horario = horarios[index];
+                                                          final isSelected = horario == _horarioSelecionado;
+
+                                                          return GestureDetector(
+                                                            onTap: () {
+                                                              setModalState(() {
+                                                                _horarioSelecionado = horario;
+                                                              });
+                                                            },
+                                                            child: AnimatedContainer(
+                                                              duration: const Duration(milliseconds: 200),
+                                                              alignment: Alignment.center,
+                                                              decoration: BoxDecoration(
+                                                                color: isSelected ? Colors.blue : Colors.grey[200],
+                                                                borderRadius: BorderRadius.circular(20),
+                                                              ),
+                                                              child: Text(
+                                                                horario,
+                                                                style: TextStyle(
+                                                                  color: isSelected ? Colors.white : Colors.black,
+                                                                  fontWeight: FontWeight.w500,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          );
+                                                        },
+                                                      );
+                                                    },
+                                                  );
+                                                },
+                                              ),
+                                            ),
+                                            const SizedBox(height: 0),
+
+                                            const Text(
+                                              "Informações pessoais",
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+
+                                            const SizedBox(height: 4),
+                                            const Divider(height: 8),
+
+                                            Container(
+                                              padding: const EdgeInsets.all(10),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade100,
+                                                borderRadius: BorderRadius.circular(16),
+                                                border: Border.all(color: Colors.grey.shade300),
+                                              ),
+                                              child: Column(
+                                                children: [
+                                                  TextField(
+                                                    controller: nomeController,
+                                                    decoration: InputDecoration(
+                                                      labelText: "Seu nome",
+                                                      prefixIcon: const Icon(Icons.person),
+                                                      filled: true,
+                                                      fillColor: Colors.white,
+                                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                                      border: OutlineInputBorder(
+                                                        borderRadius: BorderRadius.circular(12),
+                                                        borderSide: BorderSide.none,
+                                                      ),
+                                                    ),
+                                                  ),
+
+                                                  const SizedBox(height: 10),
+
+                                                  TextField(
+                                                    controller: whatsappController,
+                                                    keyboardType: TextInputType.phone,
+                                                    decoration: InputDecoration(
+                                                      labelText: "WhatsApp",
+                                                      prefixIcon: const Icon(Icons.phone),
+                                                      filled: true,
+                                                      fillColor: Colors.white,
+                                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                                                      border: OutlineInputBorder(
+                                                        borderRadius: BorderRadius.circular(12),
+                                                        borderSide: BorderSide.none,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(height: 25),
+                                            SizedBox(
+                                              width: double.infinity,
+                                              child: ElevatedButton(
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.black,
+                                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                                ),
+                                                onPressed: () {
+                                                  if (_horarioSelecionado == null) return;
+                                                  final partes = _horarioSelecionado!.split(':');
+                                                  final now = DateTime.now();
+
+                                                  final dataFinal = DateTime(
+                                                    now.year,
+                                                    now.month,
+                                                    now.day,
+                                                    int.parse(partes[0]),
+                                                    int.parse(partes[1]),
+                                                  );
+
+                                                  _salvarAgendamento(
+                                                    servicosSelecionados.map((s) => s['nome']).join(', '),
+                                                    dataFinal,
+                                                    nomeController.text,
+                                                    whatsappController.text,
+                                                  );
+
+                                                  Navigator.pop(context);
+                                                },
+                                                child: const Text("Finalizar agendamento"),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
-                              );
-                            },
-                      child: const Text("Agendar"),
+                                    );
+                                  },
+                                );
+                              },
+                        child: const Text(
+                          "Agendar",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
                     ),
+                  ),
+                ),
+
+                // --- Syslogyc Footer ---
+                const SizedBox(height: 30),
+                Center(
+                  child: Column(
+                    children: [
+                      Transform.translate(
+                        offset: const Offset(0,40),
+                        child: Image.asset(
+                          'assets/SysLogyc_logo.png',
+                          height: 130,
+                          fit: BoxFit.contain,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '© 2026 Syslogyc LTDA - Soluções inteligentes para transformar negócios',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Marcos Wryell - Founder & CEO',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black54,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                    ],
                   ),
                 ),
               ],
