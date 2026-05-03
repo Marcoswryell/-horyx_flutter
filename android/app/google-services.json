@@ -12,7 +12,20 @@
           "package_name": "com.example.horyx_fluter"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "279470076021-ip3opretdtarha1p9rmvoodgsdckjhq2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.horyx_fluter",
+            "certificate_hash": "5e4d2c1c5ceac1206393a2497902d81d065dd970"
+          }
+        },
+        {
+          "client_id": "279470076021-kqiffoo0pchb02c4fc6e5li2efdrdstm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCdLEFGZDbwqTs6vPXf_SMgrG97WnPkFsM"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "279470076021-kqiffoo0pchb02c4fc6e5li2efdrdstm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "279470076021-10salu8j21piggcr0k2o699r5lghggvf.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.horyxFluter"
+              }
+            }
+          ]
         }
       }
     }

@@ -7,13 +7,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'pages/login_page.dart';
 
 void main() async {
-  // 1. Garante que os bindings do Flutter estejam prontos
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 2. Inicializa o Firebase usando as configurações automáticas
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
-  // 3. Roda o aplicativo
   runApp(const MyApp());
 }
 
@@ -42,7 +41,7 @@ class MyApp extends StatelessWidget {
 
           // usuário logado
           if (snapshot.hasData) {
-            return const AgendamentoPage();
+            return const AdminPage();
           }
 
           // não logado
