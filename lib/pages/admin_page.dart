@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:table_calendar/table_calendar.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+
+import 'package:url_launcher/url_launcher.dart';
+// ignore: avoid_web_libraries_in_flutter
+import 'dart:html' as html;
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -15,6 +20,48 @@ class AdminPage extends StatefulWidget {
 }
 
 class _AdminPageState extends State<AdminPage> {
+  Future<void> _carregarConfiguracoes() async {
+    final uid = user?.uid;
+    if (uid == null) return;
+
+    final doc = await db
+        .collection('tenants')
+        .doc(uid)
+        .collection('config')
+        .doc('funcionamento')
+        .get();
+
+    if (!doc.exists) return;
+
+    final data = doc.data()!;
+
+    final inicio = data['inicio'] ?? '08:00';
+    final fim = data['fim'] ?? '18:00';
+
+    final inicioParts = inicio.split(':');
+    final fimParts = fim.split(':');
+
+    setState(() {
+      inicioExpediente = TimeOfDay(
+        hour: int.parse(inicioParts[0]),
+        minute: int.parse(inicioParts[1]),
+      );
+
+      fimExpediente = TimeOfDay(
+        hour: int.parse(fimParts[0]),
+        minute: int.parse(fimParts[1]),
+      );
+
+      intervaloMinutos = data['intervalo'] ?? 15;
+      duracaoPadraoMinutos = data['duracaoPadrao'] ?? 30;
+    });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _carregarConfiguracoes();
+  }
   final user = FirebaseAuth.instance.currentUser;
   final db = FirebaseFirestore.instance;
   DateTime dataSelecionada = DateTime.now();
@@ -619,7 +666,7 @@ class _AdminPageState extends State<AdminPage> {
           padding: EdgeInsets.zero,
           children: [
             UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: Color(0xFFF5F5F5)),
+              decoration: const BoxDecoration(color: Colors.black),
               currentAccountPicture: StreamBuilder<DocumentSnapshot>(
                 stream: db
                     .collection('tenants')
@@ -630,7 +677,7 @@ class _AdminPageState extends State<AdminPage> {
                 builder: (context, snapshot) {
                   if (!snapshot.hasData) {
                     return const CircleAvatar(
-                      backgroundColor: Colors.grey,
+                      backgroundColor: Colors.white24,
                       child: Icon(Icons.person, color: Colors.white),
                     );
                   }
@@ -640,7 +687,7 @@ class _AdminPageState extends State<AdminPage> {
 
                   if (fotoUrl.isEmpty) {
                     return const CircleAvatar(
-                      backgroundColor: Colors.grey,
+                      backgroundColor: Colors.white24,
                       child: Icon(Icons.person, color: Colors.white),
                     );
                   }
@@ -653,13 +700,13 @@ class _AdminPageState extends State<AdminPage> {
               accountName: Text(
                 user?.email ?? 'Usuário',
                 style: const TextStyle(
-                  color: Colors.black,
+                  color: Colors.white,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               accountEmail: const Text(
                 "Seu negócio",
-                style: TextStyle(color: Colors.black54),
+                style: TextStyle(color: Colors.white70),
               ),
             ),
             _itemMenu(Icons.calendar_today, 'Agenda', selecionado: true),
@@ -680,7 +727,7 @@ class _AdminPageState extends State<AdminPage> {
             _itemMenu(Icons.storefront, 'Marketplace', onTapCustom: _abrirMarketplace),
             _itemMenu(Icons.language, 'Agendamento Online'),
             Divider(),
-            _itemMenu(Icons.info_outline, 'Info', onTapCustom: _abrirInfoPage),
+            _itemMenu(Icons.public, 'Webpage Info', onTapCustom: _abrirInfoPage),
             _itemMenu(Icons.message_outlined, 'Suporte'),
             Divider(),
             _itemMenu(Icons.settings_outlined, 'Configurações', onTapCustom: _abrirMenuConfiguracoes),
@@ -882,19 +929,69 @@ class _AdminPageState extends State<AdminPage> {
               });
             },
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.grey.shade300),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.calendar_month, size: 18),
-                const SizedBox(width: 8),
-                Text(DateFormat('EEE, dd/MM/yyyy').format(dataSelecionada)),
-                const Icon(Icons.arrow_drop_down),
-              ],
+          GestureDetector(
+            onTap: () {
+              showModalBottomSheet(
+                context: context,
+                backgroundColor: Colors.white,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                ),
+                builder: (_) {
+                  return SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: SingleChildScrollView(
+                        child: TableCalendar(
+                          firstDay: DateTime(2020),
+                          lastDay: DateTime(2100),
+                          focusedDay: dataSelecionada,
+                          calendarFormat: CalendarFormat.month,
+                          availableGestures: AvailableGestures.horizontalSwipe,
+                          selectedDayPredicate: (day) =>
+                              isSameDay(day, dataSelecionada),
+                          onDaySelected: (selectedDay, focusedDay) {
+                            setState(() {
+                              dataSelecionada = selectedDay;
+                            });
+                            Navigator.pop(context);
+                          },
+                          headerStyle: const HeaderStyle(
+                            formatButtonVisible: false,
+                            titleCentered: true,
+                          ),
+                          calendarStyle: const CalendarStyle(
+                            outsideDaysVisible: false,
+                            todayDecoration: BoxDecoration(
+                              color: Colors.black26,
+                              shape: BoxShape.circle,
+                            ),
+                            selectedDecoration: BoxDecoration(
+                              color: Colors.black,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade300),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_month, size: 18),
+                  const SizedBox(width: 8),
+                  Text(DateFormat('EEE, dd/MM/yyyy').format(dataSelecionada)),
+                  const Icon(Icons.arrow_drop_down),
+                ],
+              ),
             ),
           ),
           IconButton(
@@ -949,28 +1046,70 @@ class _AdminPageState extends State<AdminPage> {
                     profissionalSelecionadoId = docs[i].id;
                   });
                 },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 15),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 25,
-                        backgroundImage: (data['fotoUrl'] != null && data['fotoUrl'] != '')
-                            ? NetworkImage(data['fotoUrl'])
-                            : null,
-                        backgroundColor: profissionalSelecionadoId == docs[i].id
-                            ? Colors.blue
-                            : Colors.black,
-                        child: (data['fotoUrl'] == null || data['fotoUrl'] == '')
-                            ? const Icon(Icons.person, color: Colors.white)
-                            : null,
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        nome,
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ],
+                child: AnimatedScale(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut,
+                  scale: profissionalSelecionadoId == docs[i].id ? 1.08 : 1.0,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(horizontal: 15),
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            CircleAvatar(
+                              radius: 25,
+                              backgroundImage: (data['fotoUrl'] != null && data['fotoUrl'] != '')
+                                  ? NetworkImage(data['fotoUrl'])
+                                  : null,
+                              backgroundColor: profissionalSelecionadoId == docs[i].id
+                                  ? Colors.blue
+                                  : Colors.black,
+                              child: (data['fotoUrl'] == null || data['fotoUrl'] == '')
+                                  ? const Icon(Icons.person, color: Colors.white)
+                                  : null,
+                            ),
+                            if (profissionalSelecionadoId == docs[i].id)
+                              Positioned(
+                                right: -2,
+                                bottom: -2,
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.blue,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check,
+                                    size: 14,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 5),
+                        AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 200),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: profissionalSelecionadoId == docs[i].id
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                            color: profissionalSelecionadoId == docs[i].id
+                                ? Colors.blue
+                                : Colors.black,
+                          ),
+                          child: Text(nome),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               );
@@ -1019,21 +1158,16 @@ class _AdminPageState extends State<AdminPage> {
           .snapshots(),
       builder: (context, snapshot) {
         final todosAgendamentos = snapshot.data?.docs ?? [];
-        
         final agendamentos = todosAgendamentos.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-
           final ts = data['dataHora'];
           if (ts == null) return false;
-
           if (ts is Timestamp) {
             final d = ts.toDate();
-
             return d.year == dataSelecionada.year &&
                 d.month == dataSelecionada.month &&
                 d.day == dataSelecionada.day;
           }
-
           return false;
         }).toList();
 
@@ -1055,93 +1189,505 @@ class _AdminPageState extends State<AdminPage> {
 
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Container(
-                height: 65,
-                decoration: BoxDecoration(
-                  color: ocupado ? Colors.grey.shade200 : Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    if (!ocupado)
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2),
-                      ),
-                  ],
-                  border: Border.all(
-                    color: ocupado ? Colors.transparent : Colors.grey.shade200,
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 70,
-                      alignment: Alignment.center,
-                      child: Text(
-                        horaFormatada,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: ocupado ? Colors.grey : Colors.black,
-                        ),
-                      ),
-                    ),
-                    const VerticalDivider(width: 1),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () async {
-                          if (ocupado) return;
-                          final nomeController = TextEditingController();
-                          showDialog(
-                            context: context,
-                            builder: (context) {
-                              return AlertDialog(
-                                title: const Text("Novo Agendamento"),
-                                content: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text("Horário: $horaFormatada"),
-                                    const SizedBox(height: 10),
-                                    TextField(
-                                      controller: nomeController,
-                                      decoration: const InputDecoration(
-                                        labelText: "Nome do cliente",
+              child: GestureDetector(
+                onTap: () async {
+                  if (ocupado) {
+                    final match = agendamentos.where((doc) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      return data['minutos'] == minutos;
+                    }).toList();
+
+                    if (match.isEmpty) return;
+
+                    final data = match.first.data() as Map<String, dynamic>;
+
+                    showDialog(
+                      context: context,
+                      builder: (context) {
+                        return Dialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        "Detalhes do Agendamento",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    child: const Text("Cancelar"),
+                                      IconButton(
+                                        icon: const Icon(Icons.close),
+                                        onPressed: () => Navigator.pop(context),
+                                      )
+                                    ],
                                   ),
-                                  ElevatedButton(
-                                    onPressed: () async {
-                                      final nome = nomeController.text.trim();
-                                      if (nome.isEmpty) return;
-                                      await db
-                                          .collection('tenants')
-                                          .doc(uid)
-                                          .collection('profissionais')
-                                          .doc(profissionalSelecionadoId)
-                                          .collection('agendamentos')
-                                          .add({
-                                        'profissionalId': profissionalSelecionadoId,
-                                        'hora': horaFormatada,
-                                        'minutos': (minutos),
-                                        'data': DateFormat('yyyy-MM-dd').format(dataSelecionada),
-                                        'dataTimestamp': Timestamp.fromDate(dataSelecionada),
-                                        'clienteNome': nome,
-                                        'createdAt': Timestamp.now(),
-                                      });
-                                      Navigator.pop(context);
-                                    },
-                                    child: const Text("Salvar"),
+                                  const SizedBox(height: 10),
+                                  Text("Cliente: ${data['clienteNome'] ?? data['clienteId'] ?? '---'}"),
+                                  const SizedBox(height: 6),
+                                  Text("Data: ${data['data'] ?? (data['dataTimestamp'] != null ? DateFormat('dd/MM/yyyy').format((data['dataTimestamp'] as Timestamp).toDate()) : '---')}"),
+                                  const SizedBox(height: 6),
+                                  Text("Horário: ${data['hora'] ?? (data['minutos'] != null ? '${(data['minutos'] ~/ 60).toString().padLeft(2,'0')}:${(data['minutos'] % 60).toString().padLeft(2,'0')}' : '---')}"),
+                                  const SizedBox(height: 6),
+                                  Text("Valor: ${data['valor'] != null ? 'R\$ ${data['valor']}' : 'Não informado'}"),
+                                  const SizedBox(height: 6),
+                                  Text("Telefone: ${data['telefone'] ?? data['whatsapp'] ?? 'Não informado'}"),
+                                  const SizedBox(height: 6),
+                                  Text("Serviço: ${data['servico'] ?? data['nomeServico'] ?? 'Não informado'}"),
+                                  const SizedBox(height: 20),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.green,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                          ),
+                                          onPressed: () async {
+                                            final telefone = (data['telefone'] ?? data['whatsapp'] ?? '').toString();
+
+                                            if (telefone.isEmpty) return;
+
+                                            final cliente = data['clienteNome'] ?? data['clienteId'] ?? 'Cliente';
+                                            final servico = data['servico'] ?? 'serviço';
+                                            final horario = data['hora'] ??
+                                                (data['minutos'] != null
+                                                    ? '${(data['minutos'] ~/ 60).toString().padLeft(2,'0')}:${(data['minutos'] % 60).toString().padLeft(2,'0')}'
+                                                    : '');
+                                            final dataFormatada = data['data'] ??
+                                                (data['dataTimestamp'] != null
+                                                    ? DateFormat('dd/MM/yyyy').format((data['dataTimestamp'] as Timestamp).toDate())
+                                                    : '');
+
+                                            final mensagem = Uri.encodeComponent(
+                                              "Olá $cliente, seu agendamento está confirmado!\n\n"
+                                              "Serviço: $servico\n"
+                                              "Data: $dataFormatada\n"
+                                              "Horário: $horario\n\n"
+                                              "Qualquer dúvida estamos à disposição.\n"
+                                              "Deseja confirmar o agendamento?",
+                                            );
+
+                                            final telefoneLimpo = telefone.replaceAll(RegExp(r'[^0-9]'), '');
+
+                                            final uri = Uri.parse(
+                                              "https://wa.me/55$telefoneLimpo?text=$mensagem",
+                                            );
+
+                                            try {
+                                              if (kIsWeb) {
+                                                html.window.open(uri.toString(), '_blank');
+                                              } else {
+                                                final sucesso = await launchUrl(
+                                                  uri,
+                                                  mode: LaunchMode.externalApplication,
+                                                );
+
+                                                if (!sucesso) {
+                                                  print("Não foi possível abrir o WhatsApp");
+                                                }
+                                              }
+                                            } catch (e) {
+                                              print("Erro ao abrir WhatsApp: $e");
+                                            }
+                                          },
+                                          child: const Text("WhatsApp"),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.amber,
+                                            foregroundColor: Colors.black,
+                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                          ),
+                                          onPressed: () {
+                                            // TODO: implementar encaixe manual depois
+                                          },
+                                          child: const Text("Encaixe"),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.purple,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                          ),
+                                          onPressed: () async {
+                                            final nomeController = TextEditingController(text: data['clienteNome'] ?? data['clienteId'] ?? '');
+                                            final telefoneController = TextEditingController(text: data['telefone'] ?? data['whatsapp'] ?? '');
+
+                                            DateTime novaData = (data['dataTimestamp'] is Timestamp)
+                                                ? (data['dataTimestamp'] as Timestamp).toDate()
+                                                : dataSelecionada;
+
+                                            int novosMinutos = data['minutos'] ?? 0;
+                                            List<String> servicosSelecionados;
+
+                                            if (data['servico'] is List) {
+                                              servicosSelecionados = List<String>.from(data['servico']);
+                                            } else if (data['servico'] is String && (data['servico'] as String).isNotEmpty) {
+                                              servicosSelecionados = (data['servico'] as String)
+                                                  .split(',')
+                                                  .map((e) => e.trim())
+                                                  .where((e) => e.isNotEmpty)
+                                                  .toList();
+                                            } else {
+                                              servicosSelecionados = [];
+                                            }
+                                            double valor = 0;
+
+                                            await showDialog(
+                                              context: context,
+                                              builder: (context) {
+                                                return StatefulBuilder(
+                                                  builder: (context, setStateDialog) {
+                                                    return AlertDialog(
+                                                      scrollable: true,
+                                                      title: const Text("Alterar Agendamento"),
+                                                      content: SizedBox(
+                                                        width: double.maxFinite,
+                                                        height: 600,
+                                                        child: Column(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            TextField(controller: nomeController, decoration: const InputDecoration(labelText: "Cliente")),
+                                                            const SizedBox(height: 10),
+                                                            TextField(controller: telefoneController, decoration: const InputDecoration(labelText: "Telefone")),
+                                                            const SizedBox(height: 10),
+                                                            ListTile(
+                                                              title: const Text("Selecionar data"),
+                                                              subtitle: Text(DateFormat('dd/MM/yyyy').format(novaData)),
+                                                              onTap: () async {
+                                                                final picked = await showDatePicker(
+                                                                  context: context,
+                                                                  initialDate: novaData,
+                                                                  firstDate: DateTime(2020),
+                                                                  lastDate: DateTime(2100),
+                                                                );
+                                                                if (picked != null) {
+                                                                  setStateDialog(() => novaData = picked);
+                                                                }
+                                                              },
+                                                            ),
+                                                            ListTile(
+                                                              title: const Text("Horário"),
+                                                              subtitle: Text('${(novosMinutos ~/ 60).toString().padLeft(2,'0')}:${(novosMinutos % 60).toString().padLeft(2,'0')}'),
+                                                              onTap: () async {
+                                                                final picked = await showTimePicker(
+                                                                  context: context,
+                                                                  initialTime: TimeOfDay(hour: novosMinutos ~/ 60, minute: novosMinutos % 60),
+                                                                );
+                                                                if (picked != null) {
+                                                                  setStateDialog(() {
+                                                                    novosMinutos = picked.hour * 60 + picked.minute;
+                                                                  });
+                                                                }
+                                                              },
+                                                            ),
+                                                            const SizedBox(height: 10),
+                                                            StreamBuilder<QuerySnapshot>(
+                                                              stream: db.collection('tenants').doc(uid).collection('servicos').snapshots(),
+                                                              builder: (context, snap) {
+                                                                if (!snap.hasData) return const CircularProgressIndicator();
+
+                                                                final servicos = snap.data!.docs;
+
+                                                                return Expanded(
+                                                                  child: ListView.builder(
+                                                                    itemCount: servicos.length,
+                                                                    itemBuilder: (context, index) {
+                                                                      final doc = servicos[index];
+                                                                      final s = doc.data() as Map<String, dynamic>;
+                                                                      final nome = s['nome'] ?? '';
+                                                                      final preco = (s['valor'] ?? 0).toDouble();
+
+                                                                      final selecionado = servicosSelecionados.contains(nome);
+
+                                                                      return CheckboxListTile(
+                                                                        dense: true,
+                                                                        controlAffinity: ListTileControlAffinity.leading,
+                                                                        title: Text(nome),
+                                                                        subtitle: Text("R\$ ${preco.toStringAsFixed(2)}"),
+                                                                        value: selecionado,
+                                                                        onChanged: (checked) {
+                                                                          setStateDialog(() {
+                                                                            if (checked == true) {
+                                                                              if (!servicosSelecionados.contains(nome)) {
+                                                                                servicosSelecionados.add(nome);
+                                                                              }
+                                                                            } else {
+                                                                              servicosSelecionados.remove(nome);
+                                                                            }
+
+                                                                            valor = servicosSelecionados.fold(0.0, (total, nomeSel) {
+                                                                              final matchDoc = servicos.where((d) {
+                                                                                final data = d.data() as Map<String, dynamic>;
+                                                                                return data['nome'] == nomeSel;
+                                                                              });
+
+                                                                              if (matchDoc.isEmpty) return total;
+
+                                                                              final match = matchDoc.first.data() as Map<String, dynamic>;
+
+                                                                              return total + ((match['valor'] ?? 0).toDouble());
+                                                                            });
+                                                                          });
+                                                                        },
+                                                                      );
+                                                                    },
+                                                                  ),
+                                                                );
+                                                              },
+                                                            ),
+                                                            const SizedBox(height: 10),
+                                                            Text("Valor: R\$ ${valor.toStringAsFixed(2)}"),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                      actions: [
+                                                        TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
+                                                        ElevatedButton(
+                                                          onPressed: () async {
+                                                            final ref = db
+                                                                .collection('tenants')
+                                                                .doc(uid)
+                                                                .collection('profissionais')
+                                                                .doc(profissionalSelecionadoId)
+                                                                .collection('agendamentos')
+                                                                .doc(match.first.id);
+
+                                                            await ref.update({
+                                                              'clienteNome': nomeController.text,
+                                                              'telefone': telefoneController.text,
+                                                              'dataTimestamp': Timestamp.fromDate(novaData),
+                                                              'data': DateFormat('yyyy-MM-dd').format(novaData),
+                                                              'minutos': novosMinutos,
+                                                              'hora': '${(novosMinutos ~/ 60).toString().padLeft(2,'0')}:${(novosMinutos % 60).toString().padLeft(2,'0')}',
+                                                              'servico': servicosSelecionados.join(', '),
+                                                              'valor': valor,
+                                                            });
+
+                                                            Navigator.pop(context);
+                                                          },
+                                                          child: const Text("Salvar"),
+                                                        ),
+                                                      ],
+                                                    );
+                                                  },
+                                                );
+                                              },
+                                            );
+                                          },
+                                          child: const Text("Alterar"),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.red,
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                          ),
+                                          onPressed: () async {
+                                            final confirmar = await showDialog<bool>(
+                                              context: context,
+                                              builder: (context) {
+                                                return AlertDialog(
+                                                  title: const Text("Confirmar cancelamento"),
+                                                  content: const Text("Tem certeza que deseja cancelar este agendamento?"),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () => Navigator.pop(context, false),
+                                                      child: const Text("Não"),
+                                                    ),
+                                                    ElevatedButton(
+                                                      style: ElevatedButton.styleFrom(
+                                                        backgroundColor: Colors.red,
+                                                        foregroundColor: Colors.white,
+                                                      ),
+                                                      onPressed: () => Navigator.pop(context, true),
+                                                      child: const Text("Sim, cancelar"),
+                                                    ),
+                                                  ],
+                                                );
+                                              },
+                                            );
+
+                                            if (confirmar != true) return;
+
+                                            try {
+                                              final agendamentoRef = db
+                                                  .collection('tenants')
+                                                  .doc(uid)
+                                                  .collection('profissionais')
+                                                  .doc(profissionalSelecionadoId)
+                                                  .collection('agendamentos')
+                                                  .doc(match.first.id);
+
+                                              final docSnapshot = await agendamentoRef.get();
+
+                                              if (docSnapshot.exists) {
+                                                final dados = docSnapshot.data() as Map<String, dynamic>;
+
+                                                await db
+                                                    .collection('tenants')
+                                                    .doc(uid)
+                                                    .collection('profissionais')
+                                                    .doc(profissionalSelecionadoId)
+                                                    .collection('agendamentos_excluidos')
+                                                    .add({
+                                                  ...dados,
+                                                  'status': 'excluido',
+                                                  'excluidoEm': Timestamp.now(),
+                                                });
+
+                                                await agendamentoRef.delete();
+                                              }
+
+                                              Navigator.pop(context);
+                                            } catch (e) {
+                                              print("Erro ao cancelar agendamento: $e");
+                                            }
+                                          },
+                                          child: const Text("Cancelar"),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.black,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text("Fechar"),
+                                    ),
                                   ),
                                 ],
-                              );
+                              ),
+                            ),
+                        );
+                      },
+                    );
+
+                    return;
+                  }
+
+                  final nomeController = TextEditingController();
+                  final telefoneController = TextEditingController();
+
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      return AlertDialog(
+                        title: const Text("Novo Agendamento"),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text("Horário: $horaFormatada"),
+                            const SizedBox(height: 10),
+                            TextField(
+                              controller: nomeController,
+                              decoration: const InputDecoration(
+                                labelText: "Nome do cliente",
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            TextField(
+                              controller: telefoneController,
+                              keyboardType: TextInputType.phone,
+                              decoration: const InputDecoration(
+                                labelText: "Telefone",
+                              ),
+                            ),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text("Cancelar"),
+                          ),
+                          ElevatedButton(
+                            onPressed: () async {
+                              final nome = nomeController.text.trim();
+                              if (nome.isEmpty) return;
+                              final telefone = telefoneController.text.trim();
+
+                              await db
+                                  .collection('tenants')
+                                  .doc(uid)
+                                  .collection('profissionais')
+                                  .doc(profissionalSelecionadoId)
+                                  .collection('agendamentos')
+                                  .add({
+                                'profissionalId': profissionalSelecionadoId,
+                                'hora': horaFormatada,
+                                'minutos': (minutos),
+                                'data': DateFormat('yyyy-MM-dd').format(dataSelecionada),
+                                'dataTimestamp': Timestamp.fromDate(dataSelecionada),
+                                'clienteNome': nome,
+                                'telefone': telefone,
+                                'createdAt': Timestamp.now(),
+                              });
+
+                              Navigator.pop(context);
                             },
-                          );
-                        },
+                            child: const Text("Salvar"),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                },
+                child: Container(
+                  height: 65,
+                  decoration: BoxDecoration(
+                    color: ocupado ? Colors.grey.shade200 : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      if (!ocupado)
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                    ],
+                    border: Border.all(
+                      color: ocupado ? Colors.transparent : Colors.grey.shade200,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 70,
+                        alignment: Alignment.center,
+                        child: Text(
+                          horaFormatada,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: ocupado ? Colors.grey : Colors.black,
+                          ),
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      Expanded(
                         child: Container(
                           alignment: Alignment.centerLeft,
                           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1153,26 +1699,19 @@ class _AdminPageState extends State<AdminPage> {
                                         builder: (_) {
                                           final match = agendamentos.where((doc) {
                                             final data = doc.data() as Map<String, dynamic>;
-
                                             final ts = data['dataHora'];
                                             if (ts is! Timestamp) return false;
-
                                             final d = ts.toDate();
-
                                             final mesmoDia =
                                                 d.year == dataSelecionada.year &&
                                                 d.month == dataSelecionada.month &&
                                                 d.day == dataSelecionada.day;
-
                                             return mesmoDia && data['minutos'] == minutos;
                                           }).toList();
-
                                           if (match.isEmpty) {
                                             return const Text("Ocupado");
                                           }
-
                                           final data = match.first.data() as Map<String, dynamic>;
-
                                           return Column(
                                             mainAxisSize: MainAxisSize.min,
                                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1246,8 +1785,8 @@ class _AdminPageState extends State<AdminPage> {
                                 ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );

@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/agendamento_model.dart';
 import '../services/agendamento_service.dart';
+import 'confirmacao_agendamento_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/painting.dart' show NetworkImage, WebHtmlElementStrategy;
 
@@ -14,6 +15,7 @@ class AgendamentoPage extends StatefulWidget {
 }
 
 class _AgendamentoPageState extends State<AgendamentoPage> {
+  DateTime _dataSelecionada = DateTime.now();
   String? _horarioSelecionado;
   // final AgendamentoService _service = AgendamentoService();
   String? profissionalSelecionadoId;
@@ -288,13 +290,32 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
       List<int> ocupadosMinutos = [];
 
       try {
+        final inicioDia = DateTime(
+          _dataSelecionada.year,
+          _dataSelecionada.month,
+          _dataSelecionada.day,
+          0,
+          0,
+          0,
+        );
+
+        final fimDia = DateTime(
+          _dataSelecionada.year,
+          _dataSelecionada.month,
+          _dataSelecionada.day,
+          23,
+          59,
+          59,
+        );
+
         final agendamentos = await db
             .collection('tenants')
             .doc(tenantId)
             .collection('profissionais')
             .doc(profissionalSelecionadoId!)
             .collection('agendamentos')
-            .limit(50)
+            .where('dataHora', isGreaterThanOrEqualTo: inicioDia)
+            .where('dataHora', isLessThanOrEqualTo: fimDia)
             .get();
 
         ocupadosMinutos = agendamentos.docs.map((doc) {
@@ -488,9 +509,9 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                           ),
                           builder: (_) {
+                            bool showInfo = false;
                             return StatefulBuilder(
                               builder: (context, setModalState) {
-                                bool showInfo = false;
                                 return FractionallySizedBox(
                                   heightFactor: 0.9,
                                   child: Container(
@@ -515,38 +536,46 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                         ),
                                         const SizedBox(height: 6),
-                                        Row(
-                                          children: [
-                                            GestureDetector(
-                                              onTap: () {
-                                                setModalState(() {
-                                                  showInfo = !showInfo;
-                                                });
+                                        const SizedBox(height: 10),
+                                        StatefulBuilder(
+                                          builder: (context, setModalState) {
+                                            return InkWell(
+                                              onTap: () async {
+                                                DateTime? picked = await showDatePicker(
+                                                  context: context,
+                                                  initialDate: _dataSelecionada,
+                                                  firstDate: DateTime.now(),
+                                                  lastDate: DateTime.now().add(const Duration(days: 60)),
+                                                );
+
+                                                if (picked != null) {
+                                                  setModalState(() {
+                                                    _dataSelecionada = picked;
+                                                  });
+                                                }
                                               },
-                                              child: const Icon(Icons.info_outline, size: 20),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            const Text(
-                                              "Como funciona",
-                                              style: TextStyle(color: Colors.grey),
-                                            ),
-                                          ],
+                                              borderRadius: BorderRadius.circular(10),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withOpacity(0.05),
+                                                  borderRadius: BorderRadius.circular(10),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    const Icon(Icons.calendar_month, size: 16),
+                                                    const SizedBox(width: 6),
+                                                    Text(
+                                                      "${_dataSelecionada.day.toString().padLeft(2,'0')}/${_dataSelecionada.month.toString().padLeft(2,'0')}/${_dataSelecionada.year}",
+                                                      style: const TextStyle(fontWeight: FontWeight.w500),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          },
                                         ),
-                                        if (showInfo)
-                                          Container(
-                                            margin: const EdgeInsets.only(top: 10, bottom: 10),
-                                            padding: const EdgeInsets.all(10),
-                                            decoration: BoxDecoration(
-                                              color: Colors.grey.shade100,
-                                              borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(color: Colors.grey.shade300),
-                                            ),
-                                            child: const Text(
-                                              "Selecione um profissional, depois escolha um horário disponível (verde). "
-                                              "Horários em cinza já estão ocupados. Em seguida preencha seus dados e finalize o agendamento.",
-                                              style: TextStyle(fontSize: 12, color: Colors.black87),
-                                            ),
-                                          ),
                                         const SizedBox(height: 10),
                                         // PROFISSIONAIS (somente seleção visual)
                                         SizedBox(
@@ -628,7 +657,7 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                                           child: profissionalSelecionadoId == null
                                               ? const Center(child: Text("Selecione um profissional"))
                                               : StreamBuilder<List<String>>(
-                                                  key: ValueKey(profissionalSelecionadoId),
+                                                  key: ValueKey("${profissionalSelecionadoId}_${_dataSelecionada.toIso8601String()}"),
                                                   stream: _getHorariosDisponiveis(),
                                                   builder: (context, snapshot) {
                                                     if (!snapshot.hasData) {
@@ -664,6 +693,45 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                                                   },
                                                 ),
                                         ),
+
+                                        const SizedBox(height: 15),
+
+                                        GestureDetector(
+                                          onTap: () {
+                                            setModalState(() {
+                                              showInfo = !showInfo;
+                                            });
+                                          },
+                                          child: Row(
+                                            children: const [
+                                              Icon(Icons.info_outline, size: 20),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                "Como funciona",
+                                                style: TextStyle(color: Colors.grey),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+
+                                        if (showInfo)
+                                          Container(
+                                            margin: const EdgeInsets.only(top: 10),
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey.shade100,
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: Colors.grey.shade300),
+                                            ),
+                                            child: const Text(
+                                              "1. Escolha um profissional acima.\n"
+                                              "2. Selecione a data desejada.\n"
+                                              "3. Veja os horários disponíveis.\n"
+                                              "4. Horários exibidos estão livres para agendamento.\n"
+                                              "5. Para reservar, vá em 'Agendar', escolha o horário e finalize com seus dados.",
+                                              style: TextStyle(fontSize: 12, color: Colors.black87),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),
@@ -1211,6 +1279,7 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                                               ),
                                             ),
                                             const SizedBox(height: 10),
+                                            const SizedBox(height: 10),
 
                                             Row(
                                               children: [
@@ -1231,6 +1300,47 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                                                   style: const TextStyle(fontWeight: FontWeight.w600),
                                                 ),
                                               ],
+                                            ),
+                                            const SizedBox(height: 10),
+                                            StatefulBuilder(
+                                              builder: (context, setModalState) {
+                                                return InkWell(
+                                                  onTap: () async {
+                                                    DateTime? picked = await showDatePicker(
+                                                      context: context,
+                                                      initialDate: _dataSelecionada,
+                                                      firstDate: DateTime.now(),
+                                                      lastDate: DateTime.now().add(const Duration(days: 60)),
+                                                    );
+
+                                                    if (picked != null) {
+                                                      setModalState(() {
+                                                        _dataSelecionada = picked;
+                                                        _horarioSelecionado = null;
+                                                      });
+                                                    }
+                                                  },
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  child: Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.black.withOpacity(0.05),
+                                                      borderRadius: BorderRadius.circular(10),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(Icons.calendar_month, size: 16),
+                                                        const SizedBox(width: 6),
+                                                        Text(
+                                                          "${_dataSelecionada.day.toString().padLeft(2,'0')}/${_dataSelecionada.month.toString().padLeft(2,'0')}/${_dataSelecionada.year}",
+                                                          style: const TextStyle(fontWeight: FontWeight.w500),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                );
+                                              },
                                             ),
                                             const SizedBox(height: 5),
 
@@ -1368,12 +1478,10 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                                                 onPressed: () {
                                                   if (_horarioSelecionado == null) return;
                                                   final partes = _horarioSelecionado!.split(':');
-                                                  final now = DateTime.now();
-
                                                   final dataFinal = DateTime(
-                                                    now.year,
-                                                    now.month,
-                                                    now.day,
+                                                    _dataSelecionada.year,
+                                                    _dataSelecionada.month,
+                                                    _dataSelecionada.day,
                                                     int.parse(partes[0]),
                                                     int.parse(partes[1]),
                                                   );
@@ -1386,6 +1494,19 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                                                   );
 
                                                   Navigator.pop(context);
+
+                                                  Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(
+                                                      builder: (_) => ConfirmacaoAgendamentoPage(
+                                                        nome: nomeController.text,
+                                                        telefone: whatsappController.text,
+                                                        servico: servicosSelecionados.map((s) => s['nome']).join(', '),
+                                                        data: dataFinal,
+                                                        status: 'Agendado',
+                                                      ),
+                                                    ),
+                                                  );
                                                 },
                                                 child: const Text("Finalizar agendamento"),
                                               ),

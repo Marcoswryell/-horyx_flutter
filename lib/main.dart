@@ -41,7 +41,7 @@ class MyApp extends StatelessWidget {
 
           // usuário logado
           if (snapshot.hasData) {
-            return const AdminPage();
+            return const AgendamentoPage();
           }
 
           // não logado
