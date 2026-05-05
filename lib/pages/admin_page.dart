@@ -1146,7 +1146,7 @@ class _AdminPageState extends State<AdminPage> {
     final int duracaoPadrao = duracaoPadraoMinutos;
 
     // intervalo agora é um GAP entre atendimentos
-    final totalSlots = ((fimMin - inicioMin) ~/ (duracaoPadrao + intervaloMinutos));
+    // final totalSlots = ((fimMin - inicioMin) ~/ (duracaoPadrao + intervaloMinutos));
 
     return StreamBuilder<QuerySnapshot>(
       stream: db
@@ -1160,21 +1160,68 @@ class _AdminPageState extends State<AdminPage> {
         final todosAgendamentos = snapshot.data?.docs ?? [];
         final agendamentos = todosAgendamentos.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-          final ts = data['dataHora'];
-          if (ts == null) return false;
+
+          // prioridade: timestamp
+          final ts = data['dataTimestamp'];
+
           if (ts is Timestamp) {
             final d = ts.toDate();
             return d.year == dataSelecionada.year &&
                 d.month == dataSelecionada.month &&
                 d.day == dataSelecionada.day;
           }
+
+          // fallback: string yyyy-MM-dd
+          final dataStr = data['data'];
+          if (dataStr is String && dataStr.isNotEmpty) {
+            final parts = dataStr.split('-');
+            if (parts.length == 3) {
+              final y = int.tryParse(parts[0]);
+              final m = int.tryParse(parts[1]);
+              final d = int.tryParse(parts[2]);
+
+              return y == dataSelecionada.year &&
+                  m == dataSelecionada.month &&
+                  d == dataSelecionada.day;
+            }
+          }
+
+          // 🔥 FIX PRINCIPAL: não descarta agendamentos antigos sem data
+          // (isso fazia "não reconhecer pedidos normais")
+          if (data['minutos'] != null) {
+            return true;
+          }
+
           return false;
         }).toList();
 
+        // 🔥 slots extras de encaixe
+        final Set<int> slotsExtras = {};
+
+        for (final doc in agendamentos) {
+          final data = doc.data() as Map<String, dynamic>;
+
+          if (data['encaixe'] == true && data['minutos'] != null) {
+            final int? m = data['minutos'] is int ? data['minutos'] as int : int.tryParse('${data['minutos']}');
+            if (m != null) {
+              slotsExtras.add(m);
+            }
+          }
+        }
+
+        // 🔥 slots base + extras (timeline híbrida)
+        final totalSlots = ((fimMin - inicioMin) ~/ (duracaoPadrao + intervaloMinutos));
+        final List<int> listaMinutos = {
+          for (int i = 0; i < totalSlots; i++)
+            inicioMin + (i * (duracaoPadrao + intervaloMinutos)),
+          ...slotsExtras,
+        }.toList()
+          ..sort();
+
         return ListView.builder(
-          itemCount: totalSlots,
+          itemCount: listaMinutos.length,
           itemBuilder: (context, i) {
-            final minutos = inicioMin + (i * (duracaoPadrao + intervaloMinutos));
+            final minutos = listaMinutos[i];
             if (minutos + duracaoPadrao > fimMin) {
               return const SizedBox.shrink();
             }
@@ -1182,11 +1229,33 @@ class _AdminPageState extends State<AdminPage> {
             final minuto = (minutos % 60).toString().padLeft(2, '0');
             final horaFormatada = "$hora:$minuto";
 
+            // --- 🔥 STEP 1: Adiciona função normalizadora de minutos ---
+            int _parseMinutos(Map<String, dynamic> data) {
+              final v = data['minutos'];
+              if (v is int) return v;
+              return int.tryParse(v?.toString() ?? '') ?? -1;
+            }
+
+            // --- 🔥 STEP 2: Troca comparação de ocupado para usar _parseMinutos ---
             final ocupado = agendamentos.any((doc) {
               final data = doc.data() as Map<String, dynamic>;
-              return data['minutos'] == minutos;
+
+              final m = _parseMinutos(data);
+              if (m != minutos) return false;
+
+              // garante que encaixe ou normal contam como ocupados
+              return true;
             });
 
+            // --- 🔥 STEP 3: Troca match para usar _parseMinutos ---
+            final match = agendamentos.where((doc) {
+              final data = doc.data() as Map<String, dynamic>;
+
+              final m = _parseMinutos(data);
+              return m == minutos;
+            }).toList();
+
+            // 🚀 FINAL SAFETY FIX (UI MUST ALWAYS RENDER SLOT): never block rendering based on match emptiness
             return Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: GestureDetector(
@@ -1311,8 +1380,173 @@ class _AdminPageState extends State<AdminPage> {
                                             foregroundColor: Colors.black,
                                             padding: const EdgeInsets.symmetric(vertical: 10),
                                           ),
-                                          onPressed: () {
-                                            // TODO: implementar encaixe manual depois
+                                          onPressed: () async {
+                                            // STEP 1 — ADD CONTROLLERS (inside onPressed BEFORE showDialog)
+                                            final nomeController = TextEditingController(text: data['clienteNome'] ?? '');
+                                            final telefoneController = TextEditingController(text: data['telefone'] ?? '');
+                                            List<String> servicosSelecionados = data['servico'] is List
+                                                ? List<String>.from(data['servico'])
+                                                : <String>[];
+
+                                            double valorTotal = 0.0;
+                                            DateTime dataEncaixe = dataSelecionada;
+                                            int novosMinutos = data['minutos'] ?? 0;
+
+                                            await showDialog(
+                                              context: context,
+                                              builder: (context) {
+                                                return StatefulBuilder(
+                                                  builder: (context, setStateDialog) {
+                                                        return AlertDialog(
+                                                          title: const Text("Criar Encaixe"),
+                                                          content: SingleChildScrollView(
+                                                            child: Column(
+                                                              mainAxisSize: MainAxisSize.min,
+                                                              children: [
+                                                                const Align(
+                                                                  alignment: Alignment.centerLeft,
+                                                                  child: Text("Cliente"),
+                                                                ),
+                                                                TextField(
+                                                                  controller: nomeController,
+                                                                  decoration: const InputDecoration(labelText: "Nome"),
+                                                                ),
+                                                                TextField(
+                                                                  controller: telefoneController,
+                                                                  decoration: const InputDecoration(labelText: "Telefone"),
+                                                                ),
+                                                                ListTile(
+                                                                  title: const Text("Selecionar data"),
+                                                                  subtitle: Text(DateFormat('dd/MM/yyyy').format(dataEncaixe)),
+                                                                  onTap: () async {
+                                                                    final picked = await showDatePicker(
+                                                                      context: context,
+                                                                      initialDate: dataEncaixe,
+                                                                      firstDate: DateTime(2020),
+                                                                      lastDate: DateTime(2100),
+                                                                    );
+                                                                    if (picked != null) {
+                                                                      setStateDialog(() {
+                                                                        dataEncaixe = picked;
+                                                                      });
+                                                                    }
+                                                                  },
+                                                                ),
+                                                                StreamBuilder<QuerySnapshot>(
+                                                                  stream: db.collection('tenants').doc(uid).collection('servicos').snapshots(),
+                                                                  builder: (context, snap) {
+                                                                    if (!snap.hasData) return const SizedBox();
+
+                                                                    final servicos = snap.data!.docs;
+
+                                                                    return ConstrainedBox(
+                                                                      constraints: const BoxConstraints(maxHeight: 260),
+                                                                      child: SingleChildScrollView(
+                                                                        child: Column(
+                                                                          children: servicos.map((doc) {
+                                                                            final s = doc.data() as Map<String, dynamic>;
+                                                                            final nome = s['nome'] ?? '';
+                                                                            final preco = (s['valor'] ?? 0).toDouble();
+
+                                                                            final selecionado = servicosSelecionados.contains(nome);
+
+                                                                            return CheckboxListTile(
+                                                                              dense: true,
+                                                                              controlAffinity: ListTileControlAffinity.leading,
+                                                                              title: Text(nome),
+                                                                              subtitle: Text("R\$ ${preco.toStringAsFixed(2)}"),
+                                                                              value: selecionado,
+                                                                              onChanged: (checked) {
+                                                                                setStateDialog(() {
+                                                                                  if (checked == true) {
+                                                                                    if (!servicosSelecionados.contains(nome)) {
+                                                                                      servicosSelecionados.add(nome);
+                                                                                    }
+                                                                                  } else {
+                                                                                    servicosSelecionados.remove(nome);
+                                                                                  }
+
+                                                                                  valorTotal = servicosSelecionados.fold(0.0, (total, nomeSel) {
+                                                                                    final match = servicos.where((d) {
+                                                                                      final data = d.data() as Map<String, dynamic>;
+                                                                                      return data['nome'] == nomeSel;
+                                                                                    });
+
+                                                                                    if (match.isEmpty) return total;
+
+                                                                                    final m = match.first.data() as Map<String, dynamic>;
+                                                                                    return total + ((m['valor'] ?? 0).toDouble());
+                                                                                  });
+                                                                                });
+                                                                              },
+                                                                            );
+                                                                          }).toList(),
+                                                                        ),
+                                                                      ),
+                                                                    );
+                                                                  },
+                                                                ),
+                                                                ListTile(
+                                                                  title: const Text("Selecionar horário"),
+                                                                  subtitle: Text(
+                                                                    '${(novosMinutos ~/ 60).toString().padLeft(2, '0')}:${(novosMinutos % 60).toString().padLeft(2, '0')}',
+                                                                  ),
+                                                                  onTap: () async {
+                                                                    final picked = await showTimePicker(
+                                                                      context: context,
+                                                                      initialTime: TimeOfDay(
+                                                                        hour: novosMinutos ~/ 60,
+                                                                        minute: novosMinutos % 60,
+                                                                      ),
+                                                                    );
+                                                                    if (picked != null) {
+                                                                      setStateDialog(() {
+                                                                        novosMinutos = picked.hour * 60 + picked.minute;
+                                                                      });
+                                                                    }
+                                                                  },
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                          actions: [
+                                                            TextButton(
+                                                              onPressed: () => Navigator.pop(context),
+                                                              child: const Text("Cancelar"),
+                                                            ),
+                                                            ElevatedButton(
+                                                              onPressed: () async {
+                                                                await db
+                                                                    .collection('tenants')
+                                                                    .doc(uid)
+                                                                    .collection('profissionais')
+                                                                    .doc(profissionalSelecionadoId)
+                                                                    .collection('agendamentos')
+                                                                    .add({
+                                                                  'profissionalId': profissionalSelecionadoId,
+                                                                  'clienteNome': nomeController.text,
+                                                                  'telefone': telefoneController.text,
+                                                                  'servico': servicosSelecionados.join(', '),
+                                                                  'valor': valorTotal,
+                                                                  'data': DateFormat('yyyy-MM-dd').format(dataEncaixe),
+                                                                  'dataTimestamp': Timestamp.fromDate(dataEncaixe),
+                                                                  'minutos': novosMinutos,
+                                                                  'hora':
+                                                                      '${(novosMinutos ~/ 60).toString().padLeft(2, '0')}:${(novosMinutos % 60).toString().padLeft(2, '0')}',
+                                                                  'encaixe': true,
+                                                                  'createdAt': Timestamp.now(),
+                                                                });
+                                                                Navigator.pop(context);
+                                                                Navigator.pop(context);
+                                                              },
+                                                              child: const Text("Salvar encaixe"),
+                                                            ),
+                                                          ],
+                                                        );
+                                                  },
+                                                );
+                                              },
+                                            );
                                           },
                                           child: const Text("Encaixe"),
                                         ),
@@ -1405,7 +1639,8 @@ class _AdminPageState extends State<AdminPage> {
 
                                                                 final servicos = snap.data!.docs;
 
-                                                                return Expanded(
+                                                                return SizedBox(
+                                                                  height: 260,
                                                                   child: ListView.builder(
                                                                     itemCount: servicos.length,
                                                                     itemBuilder: (context, index) {
@@ -1432,6 +1667,7 @@ class _AdminPageState extends State<AdminPage> {
                                                                               servicosSelecionados.remove(nome);
                                                                             }
 
+                                                                            // recalcula valor total corretamente
                                                                             valor = servicosSelecionados.fold(0.0, (total, nomeSel) {
                                                                               final matchDoc = servicos.where((d) {
                                                                                 final data = d.data() as Map<String, dynamic>;
@@ -1441,7 +1677,6 @@ class _AdminPageState extends State<AdminPage> {
                                                                               if (matchDoc.isEmpty) return total;
 
                                                                               final match = matchDoc.first.data() as Map<String, dynamic>;
-
                                                                               return total + ((match['valor'] ?? 0).toDouble());
                                                                             });
                                                                           });
@@ -1697,27 +1932,21 @@ class _AdminPageState extends State<AdminPage> {
                                     Expanded(
                                       child: Builder(
                                         builder: (_) {
-                                          final match = agendamentos.where((doc) {
-                                            final data = doc.data() as Map<String, dynamic>;
-                                            final ts = data['dataHora'];
-                                            if (ts is! Timestamp) return false;
-                                            final d = ts.toDate();
-                                            final mesmoDia =
-                                                d.year == dataSelecionada.year &&
-                                                d.month == dataSelecionada.month &&
-                                                d.day == dataSelecionada.day;
-                                            return mesmoDia && data['minutos'] == minutos;
-                                          }).toList();
                                           if (match.isEmpty) {
                                             return const Text("Ocupado");
                                           }
+
                                           final data = match.first.data() as Map<String, dynamic>;
+
+                                          final cliente = data['clienteNome'] ?? data['clienteId'] ?? 'Cliente';
+                                          final servico = data['servico'] ?? data['nomeServico'] ?? '';
+
                                           return Column(
                                             mainAxisSize: MainAxisSize.min,
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                data['clienteId'] ?? "Ocupado",
+                                                cliente,
                                                 style: const TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -1726,7 +1955,7 @@ class _AdminPageState extends State<AdminPage> {
                                               ),
                                               const SizedBox(height: 2),
                                               Text(
-                                                data['servico'] ?? '',
+                                                servico,
                                                 style: const TextStyle(
                                                   fontSize: 11,
                                                   color: Colors.grey,

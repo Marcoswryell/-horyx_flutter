@@ -111,8 +111,8 @@ class _LoginPageState extends State<LoginPage> {
             Expanded(
               child: Center(
                 child: Container(
-                  constraints: const BoxConstraints(maxWidth: 420),
-                  padding: const EdgeInsets.all(24),
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.06),
                     borderRadius: BorderRadius.circular(20),
@@ -132,12 +132,12 @@ class _LoginPageState extends State<LoginPage> {
                             offset: logoOffset,
                             child: Image.asset(
                               "assets/horix3.png",
-                              height: 220,
+                              height: 200,
                             ),
                           ),
                         ),
 
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 18),
 
                         TextField(
                           controller: emailController,
@@ -174,7 +174,7 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
 
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 16),
 
                         SizedBox(
                           width: double.infinity,
@@ -199,7 +199,7 @@ class _LoginPageState extends State<LoginPage> {
                                   )
                                 : Text(
                                     isLogin ? "Entrar" : "Criar conta",
-                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
                                   ),
                           ),
                         ),
@@ -251,9 +251,12 @@ class _LoginPageState extends State<LoginPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Image.asset(
-                    "assets/SysLogyc_logo.png",
-                    height: 80,
+                  Transform.translate(
+                    offset: const Offset(0, 30),
+                    child: Image.asset(
+                      "assets/SysLogyc_logo.png",
+                      height: 80,
+                    ),
                   ),
                   const SizedBox(height: 6),
                   const Text(
