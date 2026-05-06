@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+import 'package:horyx_fluter/pages/whatsapp_config_page.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 // ignore: avoid_web_libraries_in_flutter
@@ -1284,33 +1285,115 @@ class _AdminPageState extends State<AdminPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Text(
-                                        "Detalhes do Agendamento",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 16,
+                                      const SizedBox(width: 48), // espaço para compensar o botão X
+                                      const Expanded(
+                                        child: Center(
+                                          child: Text(
+                                            "Detalhes do Agendamento",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                       IconButton(
                                         icon: const Icon(Icons.close),
                                         onPressed: () => Navigator.pop(context),
-                                      )
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 10),
-                                  Text("Cliente: ${data['clienteNome'] ?? data['clienteId'] ?? '---'}"),
+                                  RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style,
+                                      children: [
+                                        const TextSpan(
+                                          text: "Cliente: ",
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        TextSpan(
+                                          text: "${data['clienteNome'] ?? data['clienteId'] ?? '---'}",
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                   const SizedBox(height: 6),
-                                  Text("Data: ${data['data'] ?? (data['dataTimestamp'] != null ? DateFormat('dd/MM/yyyy').format((data['dataTimestamp'] as Timestamp).toDate()) : '---')}"),
+                                  RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style,
+                                      children: [
+                                        const TextSpan(
+                                          text: "Data: ",
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        TextSpan(
+                                          text: "${data['data'] ?? (data['dataTimestamp'] != null ? DateFormat('dd/MM/yyyy').format((data['dataTimestamp'] as Timestamp).toDate()) : '---')}",
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                   const SizedBox(height: 6),
-                                  Text("Horário: ${data['hora'] ?? (data['minutos'] != null ? '${(data['minutos'] ~/ 60).toString().padLeft(2,'0')}:${(data['minutos'] % 60).toString().padLeft(2,'0')}' : '---')}"),
+                                  RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style,
+                                      children: [
+                                        const TextSpan(
+                                          text: "Horário: ",
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        TextSpan(
+                                          text: "${data['hora'] ?? (data['minutos'] != null ? '${(data['minutos'] ~/ 60).toString().padLeft(2,'0')}:${(data['minutos'] % 60).toString().padLeft(2,'0')}' : '---')}",
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                   const SizedBox(height: 6),
-                                  Text("Valor: ${data['valor'] != null ? 'R\$ ${data['valor']}' : 'Não informado'}"),
+                                  RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style,
+                                      children: [
+                                        const TextSpan(
+                                          text: "Valor: ",
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        TextSpan(
+                                          text: "${data['valor'] != null ? 'R\$ ${data['valor']}' : 'Não informado'}",
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                   const SizedBox(height: 6),
-                                  Text("Telefone: ${data['telefone'] ?? data['whatsapp'] ?? 'Não informado'}"),
+                                  RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style,
+                                      children: [
+                                        const TextSpan(
+                                          text: "Telefone: ",
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        TextSpan(
+                                          text: "${data['telefone'] ?? data['whatsapp'] ?? 'Não informado'}",
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                   const SizedBox(height: 6),
-                                  Text("Serviço: ${data['servico'] ?? data['nomeServico'] ?? 'Não informado'}"),
+                                  RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style,
+                                      children: [
+                                        const TextSpan(
+                                          text: "Serviço: ",
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                        TextSpan(
+                                          text: "${data['servico'] ?? data['nomeServico'] ?? 'Não informado'}",
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                   const SizedBox(height: 20),
                                   Row(
                                     children: [
@@ -1319,12 +1402,31 @@ class _AdminPageState extends State<AdminPage> {
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.green,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            shape: const CircleBorder(),
+                                            padding: const EdgeInsets.all(14),
                                           ),
                                           onPressed: () async {
                                             final telefone = (data['telefone'] ?? data['whatsapp'] ?? '').toString();
 
-                                            if (telefone.isEmpty) return;
+                                            // --- LOAD CONFIG FROM FIRESTORE (INSERTED BLOCK) ---
+                                            final uid = user?.uid;
+                                            String mensagemBase = "";
+                                            String numeroEmpresa = "";
+
+                                            if (uid != null) {
+                                              final doc = await db
+                                                  .collection('tenants')
+                                                  .doc(uid)
+                                                  .collection('config')
+                                                  .doc('empresa')
+                                                  .get();
+
+                                              if (doc.exists) {
+                                                final cfg = doc.data()!;
+                                                mensagemBase = cfg['whatsappMensagem'] ?? "";
+                                                numeroEmpresa = cfg['whatsappNumero'] ?? "";
+                                              }
+                                            }
 
                                             final cliente = data['clienteNome'] ?? data['clienteId'] ?? 'Cliente';
                                             final servico = data['servico'] ?? 'serviço';
@@ -1337,16 +1439,29 @@ class _AdminPageState extends State<AdminPage> {
                                                     ? DateFormat('dd/MM/yyyy').format((data['dataTimestamp'] as Timestamp).toDate())
                                                     : '');
 
-                                            final mensagem = Uri.encodeComponent(
-                                              "Olá $cliente, seu agendamento está confirmado!\n\n"
-                                              "Serviço: $servico\n"
-                                              "Data: $dataFormatada\n"
-                                              "Horário: $horario\n\n"
-                                              "Qualquer dúvida estamos à disposição.\n"
-                                              "Deseja confirmar o agendamento?",
-                                            );
+                                            // --- REPLACE mensagem construction ---
+                                            String mensagemFinal;
 
-                                            final telefoneLimpo = telefone.replaceAll(RegExp(r'[^0-9]'), '');
+                                            if (mensagemBase.isNotEmpty) {
+                                              mensagemFinal = mensagemBase
+                                                  .replaceAll('{cliente}', cliente)
+                                                  .replaceAll('{servico}', servico)
+                                                  .replaceAll('{data}', dataFormatada)
+                                                  .replaceAll('{hora}', horario);
+                                            } else {
+                                              mensagemFinal =
+                                                  "Olá $cliente, seu agendamento está confirmado!\n\n"
+                                                  "Serviço: $servico\n"
+                                                  "Data: $dataFormatada\n"
+                                                  "Horário: $horario\n\n"
+                                                  "Qualquer dúvida estamos à disposição.";
+                                            }
+
+                                            final mensagem = Uri.encodeComponent(mensagemFinal);
+
+                                            // --- REPLACE telefoneLimpo logic ---
+                                            final telefoneDestino = telefone.isNotEmpty ? telefone : numeroEmpresa;
+                                            final telefoneLimpo = telefoneDestino.replaceAll(RegExp(r'[^0-9]'), '');
 
                                             final uri = Uri.parse(
                                               "https://wa.me/55$telefoneLimpo?text=$mensagem",
@@ -1369,7 +1484,10 @@ class _AdminPageState extends State<AdminPage> {
                                               print("Erro ao abrir WhatsApp: $e");
                                             }
                                           },
-                                          child: const Text("WhatsApp"),
+                                          child: Image.asset(
+                                            'assets/whatsapp.png',
+                                            height: 22,
+                                          ),
                                         ),
                                       ),
                                       const SizedBox(width: 10),
@@ -1377,8 +1495,11 @@ class _AdminPageState extends State<AdminPage> {
                                         child: ElevatedButton(
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.amber,
-                                            foregroundColor: Colors.black,
-                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
                                           ),
                                           onPressed: () async {
                                             // STEP 1 — ADD CONTROLLERS (inside onPressed BEFORE showDialog)
@@ -1557,7 +1678,10 @@ class _AdminPageState extends State<AdminPage> {
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.purple,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(vertical: 14),
                                           ),
                                           onPressed: () async {
                                             final nomeController = TextEditingController(text: data['clienteNome'] ?? data['clienteId'] ?? '');
@@ -1735,7 +1859,8 @@ class _AdminPageState extends State<AdminPage> {
                                           style: ElevatedButton.styleFrom(
                                             backgroundColor: Colors.red,
                                             foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            shape: const CircleBorder(),
+                                            padding: const EdgeInsets.all(14),
                                           ),
                                           onPressed: () async {
                                             final confirmar = await showDialog<bool>(
@@ -1798,22 +1923,10 @@ class _AdminPageState extends State<AdminPage> {
                                               print("Erro ao cancelar agendamento: $e");
                                             }
                                           },
-                                          child: const Text("Cancelar"),
+                                          child: const Icon(Icons.delete),
                                         ),
                                       ),
                                     ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.black,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text("Fechar"),
-                                    ),
                                   ),
                                 ],
                               ),
@@ -2320,6 +2433,24 @@ class _AdminPageState extends State<AdminPage> {
                   Future.delayed(const Duration(milliseconds: 200), () {
                     _abrirConfiguracaoFuncionamento();
                   });
+                },
+              ),
+              ListTile(
+                leading: Image.asset(
+                  'assets/whatsapp.png',
+                  width: 24,
+                  height: 24,
+                ),
+                title: const Text("Configurações de WhatsApp"),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const WhatsAppConfigPage(),
+                    ),
+                  );
                 },
               ),
             ],

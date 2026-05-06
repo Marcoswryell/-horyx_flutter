@@ -4,8 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/agendamento_model.dart';
 import '../services/agendamento_service.dart';
 import 'confirmacao_agendamento_page.dart';
+import 'consulta_ped_page.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/painting.dart' show NetworkImage, WebHtmlElementStrategy;
+import 'dart:ui';
 
 class AgendamentoPage extends StatefulWidget {
   const AgendamentoPage({super.key});
@@ -123,15 +125,21 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
           .collection('agendamentos')
           .add({
         'clienteId': nome,
-        'whatsapp': whatsapp,
+        'telefone': whatsapp,
         'servico': novo.idServico,
         'valor': servicosSelecionados.isNotEmpty
             ? (servicosSelecionados.first['valor'] as num).toDouble()
             : 0.0,
         'profissionalId': novo.idProfissional,
+        'profissionalNome': profissionalSelecionadoNome ?? '',
         'dataHora': novo.dataHora,
         'status': novo.status,
-        'minutos': novo.dataHora.hour * 60 + novo.dataHora.minute,
+        // Compatibilidade campos admin:
+        'data': "${dataAgendada.year.toString()}-${dataAgendada.month.toString().padLeft(2, '0')}-${dataAgendada.day.toString().padLeft(2, '0')}",
+        'hora': "${dataAgendada.hour.toString().padLeft(2, '0')}:${dataAgendada.minute.toString().padLeft(2, '0')}",
+        'numero': dataAgendada.hour * 60 + dataAgendada.minute,
+        'dataTimestamp': dataAgendada,
+        'minutos': dataAgendada.hour * 60 + dataAgendada.minute,
         'duracaoTotalMinutos': duracaoTotalMinutos,
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -368,6 +376,49 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
         flexibleSpace: Container(
           decoration: BoxDecoration(
             color: Colors.white.withOpacity(0.85),
+          ),
+        ),
+      ),
+      floatingActionButton: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.3),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: FloatingActionButton.extended(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ConsultaPedPage(),
+                  ),
+                );
+              },
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              icon: const Icon(Icons.search, color: Colors.white),
+              label: const Text(
+                "Consultar",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
           ),
         ),
       ),
