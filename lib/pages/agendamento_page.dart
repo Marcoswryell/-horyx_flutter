@@ -5,9 +5,12 @@ import '../models/agendamento_model.dart';
 import '../services/agendamento_service.dart';
 import 'confirmacao_agendamento_page.dart';
 import 'consulta_ped_page.dart';
+import 'infoweb_page.dart';
+import 'comodidade_widget.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/painting.dart' show NetworkImage, WebHtmlElementStrategy;
 import 'dart:ui';
+import 'package:lottie/lottie.dart';
 
 class AgendamentoPage extends StatefulWidget {
   const AgendamentoPage({super.key});
@@ -17,6 +20,42 @@ class AgendamentoPage extends StatefulWidget {
 }
 
 class _AgendamentoPageState extends State<AgendamentoPage> {
+  Widget _drawerItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Row(
+              children: [
+                Icon(icon, color: Colors.white),
+                const SizedBox(width: 14),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
   DateTime _dataSelecionada = DateTime.now();
   String? _horarioSelecionado;
   // final AgendamentoService _service = AgendamentoService();
@@ -244,13 +283,23 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
       final inicio = (config['inicio'] ?? '08:00').toString();
       final fim = (config['fim'] ?? '18:00').toString();
       final intervalo = config['intervalo'] ?? 15;
-
-      // 🔥 Usa SEMPRE a duração padrão definida no admin
       final duracao = config['duracaoPadrao'] ?? 30;
 
-      // 🔥 Garante que são inteiros (evita erro no loop)
-      final intervaloMin = (intervalo is int) ? intervalo : (intervalo as num).toInt();
-      final duracaoMin = (duracao is int) ? duracao : (duracao as num).toInt();
+      final intervaloMin =
+          (intervalo is int) ? intervalo : (intervalo as num).toInt();
+
+      final duracaoMin =
+          (duracao is int) ? duracao : (duracao as num).toInt();
+
+      // 🔥 duração TOTAL dos serviços selecionados
+      final int duracaoSelecionada = servicosSelecionados.fold<int>(
+        0,
+        (total, item) => total + ((item['duracao'] ?? 0) as int),
+      );
+
+      // fallback caso nenhum serviço tenha sido selecionado
+      final int duracaoFinal =
+          duracaoSelecionada > 0 ? duracaoSelecionada : duracaoMin;
 
       int toMin(String h) {
         final parts = h.split(':');
@@ -259,11 +308,10 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
 
       final inicioMin = toMin(inicio);
       final fimMin = toMin(fim);
-
-      List<String> horarios = [];
+      final Set<int> horariosBase = {};
 
       // 🛑 Proteção contra loop inválido
-      if ((duracaoMin + intervaloMin) <= 0) {
+      if ((duracaoFinal + intervaloMin) <= 0) {
         return [];
       }
 
@@ -275,28 +323,31 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
         ];
       }
 
-      for (int m = inicioMin; m < fimMin; m += (duracaoMin + intervaloMin)) {
-        final fimSlot = m + duracaoMin;
-
-        // não deixa passar do horário de funcionamento
-        if (fimSlot > fimMin) break;
-
-        final h = (m ~/ 60).toString().padLeft(2, '0');
-        final min = (m % 60).toString().padLeft(2, '0');
-
-        horarios.add("$h:$min");
+      // 🔥 timeline contínua baseada no intervalo
+      for (int m = inicioMin; m < fimMin; m += intervaloMin) {
+        horariosBase.add(m);
       }
 
-      // 🔥 Se por algum motivo não gerou nada, fallback
-      if (horarios.isEmpty) {
+     // 🔥 Se por algum motivo não gerou nada, fallback
+      if (horariosBase.isEmpty) {
         return [];
       }
 
       // 🔥 Agora remove horários já agendados (por dia atual por enquanto)
-      if (profissionalSelecionadoId == null) return horarios;
+      if (profissionalSelecionadoId == null) {
+        final horariosLivres = horariosBase.toList()..sort();
+
+        return horariosLivres.map((minuto) {
+          final h = (minuto ~/ 60).toString().padLeft(2, '0');
+          final min = (minuto % 60).toString().padLeft(2, '0');
+
+          return "$h:$min";
+        }).toList();
+      }
 
       List<int> ocupadosMinutos = [];
 
+      QuerySnapshot<Map<String, dynamic>>? agendamentos;
       try {
         final inicioDia = DateTime(
           _dataSelecionada.year,
@@ -316,7 +367,7 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
           59,
         );
 
-        final agendamentos = await db
+        agendamentos = await db
             .collection('tenants')
             .doc(tenantId)
             .collection('profissionais')
@@ -326,30 +377,98 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
             .where('dataHora', isLessThanOrEqualTo: fimDia)
             .get();
 
-        ocupadosMinutos = agendamentos.docs.map((doc) {
+        for (final doc in agendamentos.docs) {
           final data = doc.data();
-          if (data['minutos'] == null) return null;
-          return data['minutos'] as int;
-        }).whereType<int>().toList();
+
+          final inicioAgendamento = (data['minutos'] ?? 0) as int;
+
+          final duracaoAgendamentoRaw =
+              data['duracaoTotalMinutos'] ?? duracaoMin;
+
+          final int duracaoAgendamento =
+              (duracaoAgendamentoRaw is int)
+                  ? duracaoAgendamentoRaw
+                  : (duracaoAgendamentoRaw as num).toInt();
+
+          final fimBloqueio =
+              inicioAgendamento + duracaoAgendamento + intervaloMin;
+
+          // 🔥 bloqueia TODOS os horários dentro da janela ocupada
+          for (final minuto in horariosBase) {
+            if (minuto >= inicioAgendamento && minuto < fimBloqueio) {
+              ocupadosMinutos.add(minuto);
+            }
+          }
+
+          // adiciona horário real de liberação
+          if (fimBloqueio <= fimMin) {
+            horariosBase.add(fimBloqueio);
+          }
+        }
 
       } catch (e) {
         ocupadosMinutos = [];
       }
 
+      final horarios = horariosBase.toList()..sort();
+
       // 🔥 DEBUG: se não existir nada salvo, libera todos
       if (ocupadosMinutos.isEmpty) {
-        return horarios;
+        final horariosLivres = horariosBase.toList()..sort();
+
+        return horariosLivres.map((minuto) {
+          final h = (minuto ~/ 60).toString().padLeft(2, '0');
+          final min = (minuto % 60).toString().padLeft(2, '0');
+
+          return "$h:$min";
+        }).toList();
       }
 
-      final filtrados = horarios.where((h) {
-        final parts = h.split(':');
-        final hMin = int.parse(parts[0]) * 60 + int.parse(parts[1]);
-        return !ocupadosMinutos.contains(hMin);
+      final filtrados = horarios.where((minuto) {
+        // remove slots ocupados
+        if (ocupadosMinutos.contains(minuto)) {
+          return false;
+        }
+
+        // 🔥 impede horários entre atendimentos
+        if (agendamentos != null) {
+          for (final doc in agendamentos.docs) {
+            final data = doc.data();
+
+            final inicioAgendamento = (data['minutos'] ?? 0) as int;
+
+            final duracaoRaw =
+                data['duracaoTotalMinutos'] ?? duracaoMin;
+
+            final int duracaoAgendamento =
+                (duracaoRaw is int)
+                    ? duracaoRaw
+                    : (duracaoRaw as num).toInt();
+
+            final liberacao =
+                inicioAgendamento + duracaoAgendamento + intervaloMin;
+
+            if (minuto > inicioAgendamento && minuto < liberacao) {
+              return false;
+            }
+          }
+        }
+
+        return true;
+      }).map((minuto) {
+        final h = (minuto ~/ 60).toString().padLeft(2, '0');
+        final min = (minuto % 60).toString().padLeft(2, '0');
+
+        return "$h:$min";
       }).toList();
 
       // 🔥 Se por algum motivo filtrou tudo, NÃO quebra a UI
       if (filtrados.isEmpty) {
-        return horarios;
+        return horarios.map((minuto) {
+          final h = (minuto ~/ 60).toString().padLeft(2, '0');
+          final min = (minuto % 60).toString().padLeft(2, '0');
+          return "$h:$min";
+        }).toList();
       }
 
       return filtrados;
@@ -361,6 +480,503 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
     return Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: Colors.white,
+      drawer: Drawer(
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.black,
+                Color(0xFF1C1C1C),
+              ],
+            ),
+          ),
+          child: SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(
+                          Icons.content_cut,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Text(
+                          'Horix',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _drawerItem(
+                  icon: Icons.info_outline,
+                  title: 'Info',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const InfoWebPage(),
+                      ),
+                    );
+                  },
+                ),
+                _drawerItem(
+                  icon: Icons.calendar_month,
+                  title: 'Agenda',
+                  onTap: () {
+                    Navigator.pop(context);
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      builder: (_) {
+                        bool showInfo = false;
+                        return StatefulBuilder(
+                          builder: (context, setModalState) {
+                            return FractionallySizedBox(
+                              heightFactor: 0.9,
+                              child: Container(
+                                color: Colors.white,
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Center(
+                                      child: Container(
+                                        width: 40,
+                                        height: 5,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[300],
+                                          borderRadius: BorderRadius.circular(10),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 15),
+                                    const Text(
+                                      "Agenda dos profissionais",
+                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    const SizedBox(height: 10),
+                                    StatefulBuilder(
+                                      builder: (context, setModalState) {
+                                        return InkWell(
+                                          onTap: () async {
+                                            DateTime? picked = await showDatePicker(
+                                              context: context,
+                                              initialDate: _dataSelecionada,
+                                              firstDate: DateTime.now(),
+                                              lastDate: DateTime.now().add(const Duration(days: 60)),
+                                            );
+
+                                            if (picked != null) {
+                                              setModalState(() {
+                                                _dataSelecionada = picked;
+                                              });
+                                            }
+                                          },
+                                          borderRadius: BorderRadius.circular(10),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withOpacity(0.05),
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.calendar_month, size: 16),
+                                                const SizedBox(width: 6),
+                                                Text(
+                                                  "${_dataSelecionada.day.toString().padLeft(2,'0')}/${_dataSelecionada.month.toString().padLeft(2,'0')}/${_dataSelecionada.year}",
+                                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(height: 10),
+                                    // PROFISSIONAIS (somente seleção visual)
+                                    SizedBox(
+                                      height: 110,
+                                      child: StreamBuilder<QuerySnapshot>(
+                                        stream: FirebaseFirestore.instance
+                                            .collection('tenants')
+                                            .doc(tenantId)
+                                            .collection('profissionais')
+                                            .snapshots(),
+                                        builder: (context, snapshot) {
+                                          if (!snapshot.hasData) {
+                                            return const Center(child: CircularProgressIndicator());
+                                          }
+
+                                          final docs = snapshot.data!.docs;
+
+                                          return ListView.builder(
+                                            scrollDirection: Axis.horizontal,
+                                            itemCount: docs.length,
+                                            itemBuilder: (context, index) {
+                                              final data = docs[index].data() as Map<String, dynamic>;
+                                              final nome = data['nome'] ?? '';
+                                              final foto = data['fotoUrl'] ?? '';
+                                              final id = docs[index].id;
+
+                                              final selected = profissionalSelecionadoId == id;
+
+                                              return GestureDetector(
+                                                onTap: () {
+                                                  setModalState(() {
+                                                    profissionalSelecionadoId = id;
+                                                    profissionalSelecionadoNome = nome;
+                                                    profissionalSelecionadoFoto = foto;
+                                                  });
+                                                },
+                                                child: Container(
+                                                  width: 95,
+                                                  margin: const EdgeInsets.only(right: 12),
+                                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                                  decoration: BoxDecoration(
+                                                    color: selected ? Colors.blue.withOpacity(0.08) : Colors.white,
+                                                    borderRadius: BorderRadius.circular(16),
+                                                    border: Border.all(
+                                                      color: selected ? Colors.blue : Colors.grey.shade200,
+                                                    ),
+                                                  ),
+                                                  child: Column(
+                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                    children: [
+                                                      CircleAvatar(
+                                                        radius: 28,
+                                                        backgroundImage:
+                                                            foto.isNotEmpty ? NetworkImage(foto) : null,
+                                                        child: foto.isEmpty ? const Icon(Icons.person) : null,
+                                                      ),
+                                                      const SizedBox(height: 6),
+                                                      Text(
+                                                        nome,
+                                                        textAlign: TextAlign.center,
+                                                        style: const TextStyle(fontSize: 12),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    const Text(
+                                      "Horários disponíveis",
+                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Expanded(
+                                      child: profissionalSelecionadoId == null
+                                          ? const Center(child: Text("Selecione um profissional"))
+                                          : StreamBuilder<List<String>>(
+                                              key: ValueKey("${profissionalSelecionadoId}_${_dataSelecionada.toIso8601String()}"),
+                                              stream: _getHorariosDisponiveis(),
+                                              builder: (context, snapshot) {
+                                                if (!snapshot.hasData) {
+                                                  return const Center(child: CircularProgressIndicator());
+                                                }
+
+                                                final horarios = snapshot.data!;
+
+                                                return GridView.builder(
+                                                  itemCount: horarios.length,
+                                                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                                    crossAxisCount: 4,
+                                                    mainAxisSpacing: 10,
+                                                    crossAxisSpacing: 10,
+                                                    childAspectRatio: 2.5,
+                                                  ),
+                                                  itemBuilder: (context, index) {
+                                                    final horario = horarios[index];
+
+                                                    return Container(
+                                                      alignment: Alignment.center,
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.grey[200],
+                                                        borderRadius: BorderRadius.circular(12),
+                                                      ),
+                                                      child: Text(
+                                                        horario,
+                                                        style: const TextStyle(fontSize: 12),
+                                                      ),
+                                                    );
+                                                  },
+                                                );
+                                              },
+                                            ),
+                                    ),
+
+                                    const SizedBox(height: 15),
+
+                                    GestureDetector(
+                                      onTap: () {
+                                        setModalState(() {
+                                          showInfo = !showInfo;
+                                        });
+                                      },
+                                      child: Row(
+                                        children: const [
+                                          Icon(Icons.info_outline, size: 20),
+                                          SizedBox(width: 6),
+                                          Text(
+                                            "Como funciona",
+                                            style: TextStyle(color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                    if (showInfo)
+                                      Container(
+                                        margin: const EdgeInsets.only(top: 10),
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade100,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: Colors.grey.shade300),
+                                        ),
+                                        child: const Text(
+                                          "1. Escolha um profissional acima.\n"
+                                          "2. Selecione a data desejada.\n"
+                                          "3. Veja os horários disponíveis.\n"
+                                          "4. Horários exibidos estão livres para agendamento.\n"
+                                          "5. Para reservar, vá em 'Agendar', escolha o horário e finalize com seus dados.",
+                                          style: TextStyle(fontSize: 12, color: Colors.black87),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    );
+                  },
+                ),
+                _drawerItem(
+                  icon: Icons.people_alt_outlined,
+                  title: 'Profissionais',
+                  onTap: () {
+                    Navigator.pop(context);
+                  },
+                ),
+                _drawerItem(
+                  icon: Icons.storefront,
+                  title: 'Marketplace',
+                  onTap: () {
+                    Navigator.pop(context);
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      shape: const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                      ),
+                      builder: (_) {
+                        return FractionallySizedBox(
+                          heightFactor: 0.9,
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            color: Colors.white,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Center(
+                                  child: Container(
+                                    width: 40,
+                                    height: 5,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[300],
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 15),
+                                Row(
+                                  children: [
+                                    const Text(
+                                      "Marketplace",
+                                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(
+                                      Icons.verified,
+                                      color: Colors.blue,
+                                      size: 18,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                Expanded(
+                                  child: StreamBuilder<QuerySnapshot>(
+                                    stream: FirebaseFirestore.instance
+                                        .collection('tenants')
+                                        .doc(tenantId)
+                                        .collection('marketplace')
+                                        .doc('produtos')
+                                        .collection('items')
+                                        .orderBy('createdAt', descending: true)
+                                        .snapshots(),
+                                    builder: (context, snapshot) {
+                                      if (!snapshot.hasData) {
+                                        return const Center(child: CircularProgressIndicator());
+                                      }
+
+                                      final docs = snapshot.data!.docs;
+
+                                      if (docs.isEmpty) {
+                                        return const Center(
+                                          child: Text("Nenhum produto cadastrado"),
+                                        );
+                                      }
+
+                                      return ListView.builder(
+                                        itemCount: docs.length,
+                                        itemBuilder: (context, index) {
+                                          final data = docs[index].data() as Map<String, dynamic>;
+
+                                          final nome = data['nome'] ?? '';
+                                          final descricao = data['descricao'] ?? '';
+                                          final valor = data['valor'] ?? 0;
+                                          final fotoUrl = data['fotoUrl'] ?? '';
+
+                                          return Container(
+                                            margin: const EdgeInsets.only(bottom: 12),
+                                            padding: const EdgeInsets.all(12),
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey[100],
+                                              borderRadius: BorderRadius.circular(14),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Container(
+                                                  width: 60,
+                                                  height: 60,
+                                                  decoration: BoxDecoration(
+                                                    borderRadius: BorderRadius.circular(10),
+                                                    image: fotoUrl.isNotEmpty
+                                                        ? DecorationImage(
+                                                            image: NetworkImage(fotoUrl),
+                                                            fit: BoxFit.cover,
+                                                          )
+                                                        : null,
+                                                    color: Colors.grey[300],
+                                                  ),
+                                                  child: fotoUrl.isEmpty
+                                                      ? const Icon(Icons.image)
+                                                      : null,
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        nome,
+                                                        style: const TextStyle(fontWeight: FontWeight.bold),
+                                                      ),
+                                                      Text(
+                                                        descricao,
+                                                        maxLines: 2,
+                                                        overflow: TextOverflow.ellipsis,
+                                                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                                Text(
+                                                  "R\$ $valor",
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.green,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+                const Spacer(),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.white.withOpacity(0.08),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.verified,
+                          color: Colors.blue,
+                        ),
+
+                        const SizedBox(width: 10),
+
+                        const Expanded(
+                          child: Text(
+                            'Powered by Horix',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         centerTitle: true,
@@ -538,7 +1154,14 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     InkWell(
-                      onTap: () {},
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const InfoWebPage(),
+                          ),
+                        );
+                      },
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
                         padding: const EdgeInsets.all(8.0),
@@ -947,12 +1570,37 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                                                         ],
                                                       ),
                                                     ),
-                                                    Text(
-                                                      "R\$ $valor",
-                                                      style: const TextStyle(
-                                                        fontWeight: FontWeight.bold,
-                                                        color: Colors.green,
-                                                      ),
+                                                    Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Text(
+                                                          "R\$ $valor",
+                                                          style: const TextStyle(
+                                                            fontWeight: FontWeight.bold,
+                                                            color: Colors.green,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: ((data['estoque'] ?? 0) <= 0)
+                                                                ? Colors.red.withOpacity(0.2)
+                                                                : Colors.green.withOpacity(0.2),
+                                                            borderRadius: BorderRadius.circular(8),
+                                                          ),
+                                                          child: Text(
+                                                            '${data['estoque'] ?? 0}',
+                                                            style: TextStyle(
+                                                              fontSize: 11,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: ((data['estoque'] ?? 0) <= 0)
+                                                                  ? Colors.red
+                                                                  : Colors.green,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ],
                                                 ),
@@ -983,6 +1631,7 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                     ),
                   ],
                 ),
+                const Divider(),
 
                 const SizedBox(height: 25),
 
@@ -1215,18 +1864,25 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                             ),
                             child: Row(
                               children: [
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 250),
+                                Container(
                                   width: 42,
                                   height: 42,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: isSelected ? Colors.white : Colors.grey.shade200,
+                                    image: (data['fotoUrl'] ?? '').toString().isNotEmpty
+                                        ? DecorationImage(
+                                            image: NetworkImage(data['fotoUrl']),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : null,
                                   ),
-                                  child: Icon(
-                                    isSelected ? Icons.check : Icons.content_cut,
-                                    color: isSelected ? Colors.black : Colors.grey,
-                                  ),
+                                  child: (data['fotoUrl'] ?? '').toString().isEmpty
+                                      ? Icon(
+                                          isSelected ? Icons.check : Icons.content_cut,
+                                          color: isSelected ? Colors.black : Colors.grey,
+                                        )
+                                      : null,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -1581,11 +2237,69 @@ class _AgendamentoPageState extends State<AgendamentoPage> {
                   ),
                 ),
 
+                // Insert ComodidadeWidget directly after the Agendar button
+                const SizedBox(height: 10),
+                ComodidadeWidget(tenantId: tenantId),
+                const SizedBox(height: 20),
+
                 // --- Syslogyc Footer ---
-                const SizedBox(height: 30),
+                const SizedBox(height: 0),
                 Center(
                   child: Column(
                     children: [
+                      const Text(
+                        'Disponível nas plataformas:',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 0),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 125,
+                            height: 125,
+                            child: Lottie.asset(
+                              'assets/lottie/play.json',
+                              fit: BoxFit.contain,
+                              repeat: true,
+                              animate: true,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.play_circle_fill,
+                                  color: Colors.black,
+                                  size: 28,
+                                );
+                              },
+                            ),
+                          ),
+
+                          const SizedBox(width: 12),
+
+                          SizedBox(
+                            width: 142,
+                            height: 135,
+                            child: Lottie.asset(
+                              'assets/lottie/apple.json',
+                              fit: BoxFit.contain,
+                              repeat: true,
+                              animate: true,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(
+                                  Icons.play_circle_fill,
+                                  color: Colors.black,
+                                  size: 35,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
                       Transform.translate(
                         offset: const Offset(0,40),
                         child: Image.asset(

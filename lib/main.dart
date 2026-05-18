@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:horyx_fluter/models/agendamento_model.dart';
 import 'package:horyx_fluter/pages/admin_page.dart';
 import 'firebase_options.dart'; // Este é o arquivo gerado pelo FlutterFire CLI
 import 'pages/agendamento_page.dart'; // Import da tela que criamos
@@ -41,7 +42,7 @@ class MyApp extends StatelessWidget {
 
           // usuário logado
           if (snapshot.hasData) {
-            return const AdminPage();
+            return const AgendamentoPage();
           }
 
           // não logado

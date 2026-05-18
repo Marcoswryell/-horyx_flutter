@@ -8,6 +8,9 @@ import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:horyx_fluter/pages/whatsapp_config_page.dart';
+import 'package:horyx_fluter/pages/web_info_geral.dart';
+import 'financeiro/financeiro_page.dart';
+import 'package:horyx_fluter/pages/comodidade_func.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 // ignore: avoid_web_libraries_in_flutter
@@ -666,49 +669,139 @@ class _AdminPageState extends State<AdminPage> {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: Colors.black),
-              currentAccountPicture: StreamBuilder<DocumentSnapshot>(
-                stream: db
-                    .collection('tenants')
-                    .doc(user!.uid)
-                    .collection('config')
-                    .doc('empresa')
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const CircleAvatar(
-                      backgroundColor: Colors.white24,
-                      child: Icon(Icons.person, color: Colors.white),
-                    );
-                  }
+            StreamBuilder<DocumentSnapshot>(
+              stream: db
+                  .collection('tenants')
+                  .doc(user!.uid)
+                  .collection('config')
+                  .doc('empresa')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                final data = snapshot.data?.data() as Map<String, dynamic>?;
+                final bannerUrl = data?['bannerUrl'] ?? '';
 
-                  final data = snapshot.data!.data() as Map<String, dynamic>?;
-                  final fotoUrl = data?['fotoUrl'] ?? '';
+                return UserAccountsDrawerHeader(
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    image: bannerUrl.isNotEmpty
+                        ? DecorationImage(
+                            image: NetworkImage(bannerUrl),
+                            fit: BoxFit.cover,
+                          )
+                        : null,
+                  ),
+                  currentAccountPicture: StreamBuilder<DocumentSnapshot>(
+                    stream: db
+                        .collection('tenants')
+                        .doc(user!.uid)
+                        .collection('config')
+                        .doc('empresa')
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) {
+                        return Container(
+                          width: 90,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withOpacity(0.8),
+                                blurRadius: 18,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: const CircleAvatar(
+                            backgroundColor: Colors.white24,
+                            child: Icon(Icons.person, color: Colors.white),
+                          ),
+                        );
+                      }
 
-                  if (fotoUrl.isEmpty) {
-                    return const CircleAvatar(
-                      backgroundColor: Colors.white24,
-                      child: Icon(Icons.person, color: Colors.white),
-                    );
-                  }
+                      final data = snapshot.data!.data() as Map<String, dynamic>?;
+                      final fotoUrl = data?['fotoUrl'] ?? '';
 
-                  return CircleAvatar(
-                    backgroundImage: NetworkImage(fotoUrl),
-                  );
-                },
-              ),
-              accountName: Text(
-                user?.email ?? 'Usuário',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              accountEmail: const Text(
-                "Seu negócio",
-                style: TextStyle(color: Colors.white70),
-              ),
+                      if (fotoUrl.isEmpty) {
+                        return Container(
+                          width: 90,
+                          height: 90,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.white.withOpacity(0.8),
+                                blurRadius: 18,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: const CircleAvatar(
+                            backgroundColor: Colors.white24,
+                            child: Icon(Icons.person, color: Colors.white),
+                          ),
+                        );
+                      }
+
+                      return Container(
+                        width: 90,
+                        height: 90,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.white.withOpacity(0.8),
+                              blurRadius: 18,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          backgroundImage: NetworkImage(fotoUrl),
+                        ),
+                      );
+                    },
+                  ),
+                  accountName: Text(
+                    user?.email ?? 'Usuário',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  accountEmail: StreamBuilder<DocumentSnapshot>(
+                    stream: db
+                        .collection('tenants')
+                        .doc(user!.uid)
+                        .collection('config')
+                        .doc('empresa')
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      final data = snapshot.data?.data() as Map<String, dynamic>?;
+                      final nomeEmpresa = data?['nome'] ?? 'Empresa';
+
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              nomeEmpresa,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Icon(
+                            Icons.verified,
+                            color: Colors.blueAccent,
+                            size: 18,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                );
+              },
             ),
             _itemMenu(Icons.calendar_today, 'Agenda', selecionado: true),
             _itemMenu(Icons.attach_money, 'Financeiro', onTapCustom: () {
@@ -728,7 +821,31 @@ class _AdminPageState extends State<AdminPage> {
             _itemMenu(Icons.storefront, 'Marketplace', onTapCustom: _abrirMarketplace),
             _itemMenu(Icons.language, 'Agendamento Online'),
             Divider(),
+            _itemMenu(
+              Icons.settings,
+              'Gerais WebPage',
+              onTapCustom: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const WebInfoGeralPage(),
+                  ),
+                );
+              },
+            ),
             _itemMenu(Icons.public, 'Webpage Info', onTapCustom: _abrirInfoPage),
+            _itemMenu(
+              Icons.room_service,
+              'Comodidades',
+              onTapCustom: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ComodidadeFuncPage(tenantId: user!.uid),
+                  ),
+                );
+              },
+            ),
             _itemMenu(Icons.message_outlined, 'Suporte'),
             Divider(),
             _itemMenu(Icons.settings_outlined, 'Configurações', onTapCustom: _abrirMenuConfiguracoes),
@@ -1210,14 +1327,90 @@ class _AdminPageState extends State<AdminPage> {
           }
         }
 
-        // 🔥 slots base + extras (timeline híbrida)
-        final totalSlots = ((fimMin - inicioMin) ~/ (duracaoPadrao + intervaloMinutos));
-        final List<int> listaMinutos = {
-          for (int i = 0; i < totalSlots; i++)
-            inicioMin + (i * (duracaoPadrao + intervaloMinutos)),
-          ...slotsExtras,
-        }.toList()
-          ..sort();
+        // --- 🔥 STEP 1: Adiciona função normalizadora de minutos ---
+        int _parseMinutos(Map<String, dynamic> data) {
+          final v = data['minutos'];
+          if (v is int) return v;
+          return int.tryParse(v?.toString() ?? '') ?? -1;
+        }
+
+        bool estaOcupado(int slotMinuto) {
+          for (final doc in agendamentos) {
+            final data = doc.data() as Map<String, dynamic>;
+
+            final inicio = _parseMinutos(data);
+            final duracaoRaw = data['duracaoTotalMinutos'];
+
+            int duracao;
+
+            if (duracaoRaw is int) {
+              duracao = duracaoRaw;
+            } else {
+              duracao = int.tryParse(duracaoRaw?.toString() ?? '') ?? duracaoPadrao;
+            }
+
+            // inclui intervalo após atendimento
+            final fim = inicio + duracao + intervaloMinutos;
+
+            // mantém clicável apenas o início do agendamento
+            if (slotMinuto == inicio) {
+              return true;
+            }
+
+            // bloqueia horários dentro da janela ocupada
+            if (slotMinuto > inicio && slotMinuto < fim) {
+              return true;
+            }
+          }
+
+          return false;
+        }
+
+        // 🔥 timeline dinâmica inteligente
+        final Set<int> listaMinutosSet = {};
+
+        // base da agenda
+        for (
+          int minutoAtual = inicioMin;
+          minutoAtual + duracaoPadrao <= fimMin;
+          minutoAtual += intervaloMinutos
+        ) {
+          listaMinutosSet.add(minutoAtual);
+        }
+
+        // adiciona horários reais de liberação
+        for (final doc in agendamentos) {
+          final data = doc.data() as Map<String, dynamic>;
+
+          final inicio = _parseMinutos(data);
+
+          final duracaoRaw = data['duracaoTotalMinutos'];
+
+          int duracao;
+
+          if (duracaoRaw is int) {
+            duracao = duracaoRaw;
+          } else {
+            duracao = int.tryParse(duracaoRaw?.toString() ?? '') ?? duracaoPadrao;
+          }
+
+          final liberacao = inicio + duracao + intervaloMinutos;
+
+          if (liberacao >= inicioMin && liberacao <= fimMin) {
+            listaMinutosSet.add(liberacao);
+          }
+        }
+
+        final List<int> listaMinutos = listaMinutosSet.toList()..sort();
+
+        // adiciona encaixes manuais sem duplicar
+        for (final extra in slotsExtras) {
+          if (!listaMinutos.contains(extra)) {
+            listaMinutos.add(extra);
+          }
+        }
+
+        listaMinutos.sort();
 
         return ListView.builder(
           itemCount: listaMinutos.length,
@@ -1230,30 +1423,17 @@ class _AdminPageState extends State<AdminPage> {
             final minuto = (minutos % 60).toString().padLeft(2, '0');
             final horaFormatada = "$hora:$minuto";
 
-            // --- 🔥 STEP 1: Adiciona função normalizadora de minutos ---
-            int _parseMinutos(Map<String, dynamic> data) {
-              final v = data['minutos'];
-              if (v is int) return v;
-              return int.tryParse(v?.toString() ?? '') ?? -1;
-            }
 
             // --- 🔥 STEP 2: Troca comparação de ocupado para usar _parseMinutos ---
-            final ocupado = agendamentos.any((doc) {
-              final data = doc.data() as Map<String, dynamic>;
+            final ocupado = estaOcupado(minutos);
 
-              final m = _parseMinutos(data);
-              if (m != minutos) return false;
-
-              // garante que encaixe ou normal contam como ocupados
-              return true;
-            });
-
-            // --- 🔥 STEP 3: Troca match para usar _parseMinutos ---
+            // --- 🔥 STEP 3: Troca match para usar intervalo de minutos ---
             final match = agendamentos.where((doc) {
               final data = doc.data() as Map<String, dynamic>;
 
-              final m = _parseMinutos(data);
-              return m == minutos;
+              final inicio = _parseMinutos(data);
+
+              return minutos == inicio;
             }).toList();
 
             // 🚀 FINAL SAFETY FIX (UI MUST ALWAYS RENDER SLOT): never block rendering based on match emptiness
@@ -1264,7 +1444,10 @@ class _AdminPageState extends State<AdminPage> {
                   if (ocupado) {
                     final match = agendamentos.where((doc) {
                       final data = doc.data() as Map<String, dynamic>;
-                      return data['minutos'] == minutos;
+
+                      final inicio = _parseMinutos(data);
+
+                      return minutos == inicio;
                     }).toList();
 
                     if (match.isEmpty) return;
@@ -1510,6 +1693,7 @@ class _AdminPageState extends State<AdminPage> {
                                                 : <String>[];
 
                                             double valorTotal = 0.0;
+                                            int duracaoTotal = 0;
                                             DateTime dataEncaixe = dataSelecionada;
                                             int novosMinutos = data['minutos'] ?? 0;
 
@@ -1587,17 +1771,29 @@ class _AdminPageState extends State<AdminPage> {
                                                                                     servicosSelecionados.remove(nome);
                                                                                   }
 
-                                                                                  valorTotal = servicosSelecionados.fold(0.0, (total, nomeSel) {
-                                                                                    final match = servicos.where((d) {
-                                                                                      final data = d.data() as Map<String, dynamic>;
-                                                                                      return data['nome'] == nomeSel;
-                                                                                    });
-
-                                                                                    if (match.isEmpty) return total;
-
-                                                                                    final m = match.first.data() as Map<String, dynamic>;
-                                                                                    return total + ((m['valor'] ?? 0).toDouble());
+                                                                                 valorTotal = servicosSelecionados.fold(0.0, (total, nomeSel) {
+                                                                                  final match = servicos.where((d) {
+                                                                                    final data = d.data() as Map<String, dynamic>;
+                                                                                    return data['nome'] == nomeSel;
                                                                                   });
+
+                                                                                  if (match.isEmpty) return total;
+
+                                                                                  final m = match.first.data() as Map<String, dynamic>;
+                                                                                  return total + ((m['valor'] ?? 0).toDouble());
+                                                                                });
+
+                                                                                duracaoTotal = servicosSelecionados.fold(0, (total, nomeSel) {
+                                                                                  final match = servicos.where((d) {
+                                                                                    final data = d.data() as Map<String, dynamic>;
+                                                                                    return data['nome'] == nomeSel;
+                                                                                  });
+
+                                                                                  if (match.isEmpty) return total;
+
+                                                                                  final m = match.first.data() as Map<String, dynamic>;
+                                                                                  return total + ((m['duracao'] ?? 30) as int);
+                                                                                }); 
                                                                                 });
                                                                               },
                                                                             );
@@ -1643,15 +1839,30 @@ class _AdminPageState extends State<AdminPage> {
                                                                     .collection('profissionais')
                                                                     .doc(profissionalSelecionadoId)
                                                                     .collection('agendamentos')
-                                                                    .add({
+                                                                    .doc(match.first.id)
+                                                                    .update({
                                                                   'profissionalId': profissionalSelecionadoId,
-                                                                  'clienteNome': nomeController.text,
+                                                                  'clienteId': nomeController.text,
                                                                   'telefone': telefoneController.text,
                                                                   'servico': servicosSelecionados.join(', '),
                                                                   'valor': valorTotal,
-                                                                  'data': DateFormat('yyyy-MM-dd').format(dataEncaixe),
-                                                                  'dataTimestamp': Timestamp.fromDate(dataEncaixe),
+                                                                  // --- PATCH: Ensure fields are synchronized with edited values ---
                                                                   'minutos': novosMinutos,
+                                                                  'numero': novosMinutos,
+                                                                  'hora': '${(novosMinutos ~/ 60).toString().padLeft(2, '0')}:${(novosMinutos % 60).toString().padLeft(2, '0')}',
+                                                                  'dataTimestamp': Timestamp.fromDate(
+                                                                    DateTime(
+                                                                      dataEncaixe.year,
+                                                                      dataEncaixe.month,
+                                                                      dataEncaixe.day,
+                                                                      novosMinutos ~/ 60,
+                                                                      novosMinutos % 60,
+                                                                    ),
+                                                                  ),
+                                                                  'duracaoTotalMinutos': duracaoTotal,
+                                                                  'data': DateFormat('yyyy-MM-dd').format(dataEncaixe),
+                                                                  'minutos': novosMinutos,
+                                                                  'duracao': duracaoTotal,
                                                                   'hora':
                                                                       '${(novosMinutos ~/ 60).toString().padLeft(2, '0')}:${(novosMinutos % 60).toString().padLeft(2, '0')}',
                                                                   'encaixe': true,
@@ -1829,7 +2040,7 @@ class _AdminPageState extends State<AdminPage> {
                                                                 .doc(match.first.id);
 
                                                             await ref.update({
-                                                              'clienteNome': nomeController.text,
+                                                              'clienteId': nomeController.text,
                                                               'telefone': telefoneController.text,
                                                               'dataTimestamp': Timestamp.fromDate(novaData),
                                                               'data': DateFormat('yyyy-MM-dd').format(novaData),
@@ -2143,6 +2354,31 @@ class _AdminPageState extends State<AdminPage> {
     final valorController = TextEditingController();
     int duracaoMinutos = 30;
 
+    final picker = ImagePicker();
+    XFile? imagemFile;
+
+    Future<String?> uploadImagemServico(XFile file) async {
+      try {
+        final uid = FirebaseAuth.instance.currentUser!.uid;
+
+        final ref = FirebaseStorage.instance.ref().child(
+          "tenants/$uid/servicos/${DateTime.now().millisecondsSinceEpoch}.jpg",
+        );
+
+        if (kIsWeb) {
+          final bytes = await file.readAsBytes();
+          await ref.putData(bytes);
+        } else {
+          await ref.putFile(File(file.path));
+        }
+
+        return await ref.getDownloadURL();
+      } catch (e) {
+        print("Erro upload serviço: $e");
+        return null;
+      }
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2155,9 +2391,9 @@ class _AdminPageState extends State<AdminPage> {
                 bottom: MediaQuery.of(context).viewInsets.bottom,
               ),
               child: DraggableScrollableSheet(
-                initialChildSize: 0.6,
-                maxChildSize: 0.9,
-                minChildSize: 0.4,
+                initialChildSize: 0.7,
+                maxChildSize: 0.95,
+                minChildSize: 0.5,
                 builder: (_, controller) {
                   return Container(
                     decoration: const BoxDecoration(
@@ -2166,7 +2402,7 @@ class _AdminPageState extends State<AdminPage> {
                     ),
                     child: ListView(
                       controller: controller,
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(16),
                       children: [
                         Center(
                           child: Container(
@@ -2178,140 +2414,266 @@ class _AdminPageState extends State<AdminPage> {
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 20),
+
                         const Text(
                           "Cadastrar Serviço",
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
+
                         const SizedBox(height: 20),
 
                         TextField(
                           controller: nomeController,
                           decoration: InputDecoration(
                             labelText: "Nome do serviço",
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                         ),
 
-                        const SizedBox(height: 15),
+                        const SizedBox(height: 12),
 
                         TextField(
                           controller: valorController,
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
-                            labelText: "Valor (R\$)",
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                            labelText: "Valor",
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                         ),
 
-                        const SizedBox(height: 20),
-
-                        const Text(
-                          "Duração",
-                          style: TextStyle(fontWeight: FontWeight.w500),
-                        ),
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
 
                         TextField(
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
-                            labelText: "Tempo em minutos (ex: 30)",
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
+                            labelText: "Duração (min)",
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                          onChanged: (value) {
-                            final parsed = int.tryParse(value);
-                            if (parsed != null) {
-                              duracaoMinutos = parsed;
-                            }
+                          onChanged: (v) {
+                            final parsed = int.tryParse(v);
+                            if (parsed != null) duracaoMinutos = parsed;
                           },
                         ),
 
-                        const SizedBox(height: 30),
+                        const SizedBox(height: 15),
 
-                        // --- Inserido bloco de serviços cadastrados ---
-                        const SizedBox(height: 20),
-                        const Divider(),
-                        const SizedBox(height: 10),
-                        const Text(
-                          "Serviços cadastrados",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        GestureDetector(
+                          onTap: () async {
+                            final picked = await picker.pickImage(source: ImageSource.gallery);
+                            if (picked != null) {
+                              setState(() {
+                                imagemFile = picked;
+                              });
+                            }
+                          },
+                          child: Container(
+                            height: 120,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Center(
+                              child: imagemFile == null
+                                  ? const Text("Selecionar imagem do serviço")
+                                  : const Icon(Icons.check_circle, color: Colors.green, size: 40),
+                            ),
+                          ),
                         ),
-                        const SizedBox(height: 10),
+
+                        const SizedBox(height: 20),
+
                         StreamBuilder<QuerySnapshot>(
-                          stream: db
+                          stream: FirebaseFirestore.instance
                               .collection('tenants')
                               .doc(FirebaseAuth.instance.currentUser!.uid)
                               .collection('servicos')
                               .orderBy('createdAt', descending: true)
                               .snapshots(),
                           builder: (context, snapshot) {
-                            if (snapshot.connectionState == ConnectionState.waiting) {
+                            if (!snapshot.hasData) {
                               return const Center(child: CircularProgressIndicator());
                             }
 
-                            if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                              return const Text("Nenhum serviço cadastrado");
-                            }
-
-                            final servicos = snapshot.data!.docs;
+                            final docs = snapshot.data!.docs;
 
                             return ListView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
-                              itemCount: servicos.length,
-                              itemBuilder: (context, index) {
-                                final doc = servicos[index];
-                                final data = doc.data() as Map<String, dynamic>;
+                              itemCount: docs.length,
+                              itemBuilder: (context, i) {
+                                final data = docs[i].data() as Map<String, dynamic>;
 
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade100,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            data['nome'] ?? '',
-                                            style: const TextStyle(fontWeight: FontWeight.bold),
-                                          ),
-                                          Text("R\$ ${data['valor']}"),
-                                          Text("${data['duracaoMinutos']} min"),
-                                        ],
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete, color: Colors.red),
-                                        onPressed: () async {
-                                          await db
-                                              .collection('tenants')
-                                              .doc(FirebaseAuth.instance.currentUser!.uid)
-                                              .collection('servicos')
-                                              .doc(doc.id)
-                                              .delete();
-                                        },
-                                      )
-                                    ],
-                                  ),
-                                );
+                               return ListTile(
+  leading: CircleAvatar(
+    backgroundImage: (data['fotoUrl'] ?? '').isNotEmpty
+        ? NetworkImage(data['fotoUrl'])
+        : null,
+    child: (data['fotoUrl'] ?? '').isEmpty
+        ? const Icon(Icons.cut)
+        : null,
+  ),
+  title: Text(data['nome'] ?? ''),
+  subtitle: Text("R\$ ${data['valor']} • ${data['duracao']} min"),
+  trailing: Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      IconButton(
+        icon: const Icon(Icons.edit, color: Colors.black),
+        onPressed: () {
+          final nomeEditController = TextEditingController(
+            text: data['nome'] ?? '',
+          );
+
+          final valorEditController = TextEditingController(
+            text: (data['valor'] ?? '').toString(),
+          );
+
+          final duracaoEditController = TextEditingController(
+            text: (data['duracao'] ?? '').toString(),
+          );
+
+          final picker = ImagePicker();
+          XFile? novaImagem;
+
+          showDialog(
+            context: context,
+            builder: (context) {
+              return StatefulBuilder(
+                builder: (context, setStateDialog) {
+                  return AlertDialog(
+                    title: const Text('Editar Serviço'),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        GestureDetector(
+                          onTap: () async {
+                            final picked = await picker.pickImage(
+                              source: ImageSource.gallery,
+                            );
+
+                            if (picked != null) {
+                              setStateDialog(() {
+                                novaImagem = picked;
+                              });
+                            }
+                          },
+                          child: Container(
+                            height: 90,
+                            margin: const EdgeInsets.only(bottom: 14),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.grey.shade300),
+                            ),
+                            child: Center(
+                              child: novaImagem != null
+                                  ? const Icon(Icons.check_circle, color: Colors.green, size: 40)
+                                  : const Text('Alterar imagem do serviço'),
+                            ),
+                          ),
+                        ),
+                        TextField(
+                          controller: nomeEditController,
+                          decoration: const InputDecoration(
+                            labelText: 'Nome do serviço',
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: valorEditController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Valor',
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: duracaoEditController,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            labelText: 'Duração (min)',
+                          ),
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancelar'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () async {
+                          String? fotoUrl;
+
+                          if (novaImagem != null) {
+                            final ref = FirebaseStorage.instance.ref().child(
+                              'tenants/${FirebaseAuth.instance.currentUser!.uid}/servicos/${docs[i].id}.jpg',
+                            );
+
+                            if (kIsWeb) {
+                              final bytes = await novaImagem!.readAsBytes();
+                              await ref.putData(bytes);
+                            } else {
+                              await ref.putFile(File(novaImagem!.path));
+                            }
+
+                            fotoUrl = await ref.getDownloadURL();
+                          }
+                          await FirebaseFirestore.instance
+                              .collection('tenants')
+                              .doc(FirebaseAuth.instance.currentUser!.uid)
+                              .collection('servicos')
+                              .doc(docs[i].id)
+                              .update({
+                            if (fotoUrl != null) 'fotoUrl': fotoUrl,
+                            'nome': nomeEditController.text.trim(),
+                            'valor': double.tryParse(
+                                  valorEditController.text.replaceAll(',', '.'),
+                                ) ??
+                                0,
+                            'duracao': int.tryParse(
+                                  duracaoEditController.text,
+                                ) ??
+                                30,
+                            'duracaoMinutos': int.tryParse(
+                                  duracaoEditController.text,
+                                ) ??
+                                30,
+                          });
+
+                          Navigator.pop(context);
+                        },
+                        child: const Text('Salvar'),
+                      ),
+                    ],
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+      IconButton(
+        icon: const Icon(Icons.delete, color: Color.fromARGB(255, 0, 0, 0)),
+        onPressed: () async {
+          await FirebaseFirestore.instance
+              .collection('tenants')
+              .doc(FirebaseAuth.instance.currentUser!.uid)
+              .collection('servicos')
+              .doc(docs[i].id)
+              .delete();
+        },
+      ),
+    ],
+  ),
+);
                               },
                             );
                           },
                         ),
-                        // --- Fim do bloco inserido ---
+
+                        const SizedBox(height: 20),
 
                         ElevatedButton(
                           style: ElevatedButton.styleFrom(
@@ -2320,67 +2682,32 @@ class _AdminPageState extends State<AdminPage> {
                             padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
                           onPressed: () async {
-                            final user = FirebaseAuth.instance.currentUser;
+                            final uid = FirebaseAuth.instance.currentUser?.uid;
+                            if (uid == null) return;
 
-                            if (user == null) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Usuário não autenticado")),
-                              );
-                              return;
+                            String fotoUrl = '';
+
+                            if (imagemFile != null) {
+                              final url = await uploadImagemServico(imagemFile!);
+                              fotoUrl = url ?? '';
                             }
 
-                            // Força sincronização do token com o Firestore
-                            await user.getIdToken(true);
+                            await db
+                                .collection('tenants')
+                                .doc(uid)
+                                .collection('servicos')
+                                .add({
+                              'nome': nomeController.text.trim(),
+                              'valor': double.tryParse(valorController.text.replaceAll(',', '.')) ?? 0,
+                              'duracao': duracaoMinutos,
+                              'duracaoMinutos': duracaoMinutos,
+                              'fotoUrl': fotoUrl ?? '',
+                              'ativo': true,
+                              'ordem': DateTime.now().millisecondsSinceEpoch,
+                              'createdAt': Timestamp.now(),
+                            });
 
-                            final uid = user.uid;
-
-                            print("USER UID: $uid");
-
-                            final nome = nomeController.text.trim();
-                            final valor = double.tryParse(valorController.text.replaceAll(',', '.'));
-
-                            if (nome.isEmpty || valor == null || duracaoMinutos <= 0) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Preencha todos os campos corretamente")),
-                              );
-                              return;
-                            }
-
-                            try {
-                              print("SALVANDO SERVIÇO...");
-                              print("nome: $nome");
-                              print("valor: $valor");
-                              print("duracao: $duracaoMinutos");
-
-                              final tenantRef = db.collection('tenants').doc(uid);
-                              final ref = tenantRef.collection('servicos').doc();
-
-                              print("CAMINHO: tenants/$uid/servicos/${ref.id}");
-
-                              await ref.set({
-                                'nome': nome,
-                                'valor': valor,
-                                'duracaoMinutos': duracaoMinutos,
-                                'duracao': duracaoMinutos,
-                                'ativo': true,
-                                'ordem': Timestamp.now().millisecondsSinceEpoch,
-                                'createdAt': Timestamp.now(),
-                              });
-
-                              print("SALVO NO FIREBASE COM ID: ${ref.id}");
-
-
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text("Serviço salvo com sucesso")),
-                              );
-
-                              Navigator.pop(context);
-                            } catch (e) {
-                              print("ERRO AO SALVAR: $e");
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text("Erro ao salvar: $e")),
-                              );
-                            }
+                            Navigator.pop(context);
                           },
                           child: const Text("Salvar serviço"),
                         ),
@@ -2394,7 +2721,6 @@ class _AdminPageState extends State<AdminPage> {
         );
       },
     );
-    print("PROJECT ID: ${FirebaseFirestore.instance.app.options.projectId}");
   }
   void _abrirMenuConfiguracoes() {
     showModalBottomSheet(
@@ -2464,6 +2790,7 @@ class _AdminPageState extends State<AdminPage> {
     final nomeController = TextEditingController();
     final descricaoController = TextEditingController();
     final valorController = TextEditingController();
+    final estoqueController = TextEditingController();
 
     XFile? fotoFile;
     final picker = ImagePicker();
@@ -2563,6 +2890,16 @@ class _AdminPageState extends State<AdminPage> {
                           ),
                         ),
 
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: estoqueController,
+                          keyboardType: TextInputType.number,
+                          decoration: InputDecoration(
+                            labelText: "Estoque (quantidade)",
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+
                         const SizedBox(height: 15),
 
                         GestureDetector(
@@ -2602,6 +2939,7 @@ class _AdminPageState extends State<AdminPage> {
                             final nome = nomeController.text.trim();
                             final descricao = descricaoController.text.trim();
                             final valor = double.tryParse(valorController.text.replaceAll(',', '.'));
+                            final estoque = int.tryParse(estoqueController.text) ?? 0;
 
                             if (nome.isEmpty || descricao.isEmpty || valor == null) return;
 
@@ -2622,6 +2960,7 @@ class _AdminPageState extends State<AdminPage> {
                               'nome': nome,
                               'descricao': descricao,
                               'valor': valor,
+                              'estoque': estoque,
                               'fotoUrl': fotoUrl,
                               'createdAt': Timestamp.now(),
                             });
@@ -2719,6 +3058,102 @@ class _AdminPageState extends State<AdminPage> {
                                             fontWeight: FontWeight.bold,
                                             color: Colors.green,
                                           ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: (data['estoque'] ?? 0) <= 0
+                                                ? Colors.red.withOpacity(0.2)
+                                                : Colors.green.withOpacity(0.2),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            (data['estoque'] ?? 0) <= 0
+                                                ? 'Esgotado'
+                                                : 'Estoque: ${data['estoque']}',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold,
+                                              color: (data['estoque'] ?? 0) <= 0
+                                                  ? Colors.red
+                                                  : Colors.green,
+                                            ),
+                                          ),
+                                        ),
+                                        // --- STEP 1: Add Edit Button before Delete Button ---
+                                        IconButton(
+                                          icon: const Icon(Icons.edit, color: Colors.blue),
+                                          onPressed: () {
+                                            final nomeEditController = TextEditingController(text: data['nome'] ?? '');
+                                            final descricaoEditController = TextEditingController(text: data['descricao'] ?? '');
+                                            final valorEditController = TextEditingController(text: (data['valor'] ?? '').toString());
+                                            final estoqueEditController = TextEditingController(text: (data['estoque'] ?? '').toString());
+
+                                            showDialog(
+                                              context: context,
+                                              builder: (context) {
+                                                return AlertDialog(
+                                                  title: const Text('Editar Produto'),
+                                                  content: SingleChildScrollView(
+                                                    child: Column(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        TextField(
+                                                          controller: nomeEditController,
+                                                          decoration: const InputDecoration(labelText: 'Nome'),
+                                                        ),
+                                                        const SizedBox(height: 10),
+                                                        TextField(
+                                                          controller: descricaoEditController,
+                                                          maxLines: 2,
+                                                          decoration: const InputDecoration(labelText: 'Descrição'),
+                                                        ),
+                                                        const SizedBox(height: 10),
+                                                        TextField(
+                                                          controller: valorEditController,
+                                                          keyboardType: TextInputType.number,
+                                                          decoration: const InputDecoration(labelText: 'Valor'),
+                                                        ),
+                                                        const SizedBox(height: 10),
+                                                        TextField(
+                                                          controller: estoqueEditController,
+                                                          keyboardType: TextInputType.number,
+                                                          decoration: const InputDecoration(labelText: 'Estoque'),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () => Navigator.pop(context),
+                                                      child: const Text('Cancelar'),
+                                                    ),
+                                                    ElevatedButton(
+                                                      onPressed: () async {
+                                                        await db
+                                                            .collection('tenants')
+                                                            .doc(uid)
+                                                            .collection('marketplace')
+                                                            .doc('produtos')
+                                                            .collection('items')
+                                                            .doc(docs[i].id)
+                                                            .update({
+                                                          'nome': nomeEditController.text.trim(),
+                                                          'descricao': descricaoEditController.text.trim(),
+                                                          'valor': double.tryParse(valorEditController.text.replaceAll(',', '.')) ?? 0,
+                                                          'estoque': int.tryParse(estoqueEditController.text) ?? 0,
+                                                        });
+
+                                                        Navigator.pop(context);
+                                                      },
+                                                      child: const Text('Salvar'),
+                                                    ),
+                                                  ],
+                                                );
+                                              },
+                                            );
+                                          },
                                         ),
                                         IconButton(
                                           icon: const Icon(Icons.delete, color: Colors.red),
@@ -2862,458 +3297,7 @@ class ClientesPage extends StatelessWidget {
 }
 
 
-class FinanceiroPage extends StatefulWidget {
-  const FinanceiroPage({super.key});
 
-  @override
-  State<FinanceiroPage> createState() => _FinanceiroPageState();
-}
-
-class _FinanceiroPageState extends State<FinanceiroPage> {
-  final user = FirebaseAuth.instance.currentUser;
-  final db = FirebaseFirestore.instance;
-
-  double totalHoje = 0;
-  double totalSemana = 0;
-  double totalGeral = 0;
-
-  DateTime hoje = DateTime.now();
-
-  // --- Period and Professional Filter State ---
-  String periodo = 'hoje'; // hoje | semana | mes
-  String profissionalFiltro = 'todos';
-
-  @override
-  void initState() {
-    super.initState();
-    _calcularTotais();
-  }
-
-  Future<void> _calcularTotais() async {
-    if (user == null) return;
-
-    final snapshot = await db
-        .collection('tenants')
-        .doc(user!.uid)
-        .collection('financeiro_cache')
-        .get();
-
-    double hojeTemp = 0;
-    double semanaTemp = 0;
-    double mesTemp = 0;
-    double geralTemp = 0;
-
-    for (var doc in snapshot.docs) {
-      final data = doc.data();
-      final valor = (data['valor'] ?? 0).toDouble();
-
-      if (profissionalFiltro != 'todos' && data['profissionalId'] != profissionalFiltro) {
-        continue;
-      }
-
-      final ts = data['data'];
-      if (ts is Timestamp) {
-        final d = ts.toDate();
-        geralTemp += valor;
-
-        final inicioHoje = DateTime(hoje.year, hoje.month, hoje.day);
-        final fimHoje = inicioHoje.add(const Duration(days: 1));
-        if (d.isAfter(inicioHoje.subtract(const Duration(seconds: 1))) && d.isBefore(fimHoje)) {
-          hojeTemp += valor;
-        }
-
-        final inicioSemana = DateTime(hoje.year, hoje.month, hoje.day)
-            .subtract(Duration(days: hoje.weekday - 1));
-        if (d.isAfter(inicioSemana.subtract(const Duration(seconds: 1))) &&
-            d.isBefore(hoje.add(const Duration(days: 1)))) {
-          semanaTemp += valor;
-        }
-
-        final inicioMes = DateTime(hoje.year, hoje.month, 1);
-        if (d.isAfter(inicioMes.subtract(const Duration(seconds: 1)))) {
-          mesTemp += valor;
-        }
-      }
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      totalHoje = hojeTemp;
-      totalSemana = semanaTemp;
-      totalGeral = periodo == 'mes' ? mesTemp : (periodo == 'semana' ? semanaTemp : hojeTemp);
-    });
-  }
-
-  Widget _card(String titulo, double valor, IconData icon, Color iconColor) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.symmetric(horizontal: 5),
-        decoration: BoxDecoration(
-          color: Colors.black,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: iconColor, size: 28),
-            const SizedBox(height: 8),
-            Text(titulo, style: const TextStyle(color: Colors.white70)),
-            const SizedBox(height: 6),
-            Text(
-              "R\$ ${valor.toStringAsFixed(2)}",
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _fecharCaixa() async {
-    if (user == null) return;
-
-    await db
-        .collection('tenants')
-        .doc(user!.uid)
-        .collection('financeiro')
-        .add({
-      'data': Timestamp.now(),
-      'totalHoje': totalHoje,
-      'profissionalFiltro': profissionalFiltro,
-      'createdAt': Timestamp.now(),
-    });
-
-    final cache = await db
-        .collection('tenants')
-        .doc(user!.uid)
-        .collection('financeiro_cache')
-        .get();
-
-    for (var doc in cache.docs) {
-      await doc.reference.delete();
-    }
-
-    await _calcularTotais();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Caixa fechado")),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (user == null) {
-      return const Scaffold(body: Center(child: Text("Sem usuário")));
-    }
-
-    return Scaffold(
-      backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: const Text('Financeiro'),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Colors.black),
-        titleTextStyle: const TextStyle(
-          color: Colors.black,
-          fontSize: 18,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      body: RefreshIndicator(
-        onRefresh: _calcularTotais,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // --- Period Filter UI ---
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _filtroPeriodoBtn('Hoje', 'hoje'),
-                _filtroPeriodoBtn('Semana', 'semana'),
-                _filtroPeriodoBtn('Mês', 'mes'),
-              ],
-            ),
-            const SizedBox(height: 10),
-            // --- Professional Filter UI ---
-            StreamBuilder<QuerySnapshot>(
-              stream: db
-                  .collection('tenants')
-                  .doc(user!.uid)
-                  .collection('profissionais')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return const SizedBox();
-
-                final docs = snapshot.data!.docs;
-
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _profBtn('Todos', 'todos'),
-                      ...docs.map((d) {
-                        final data = d.data() as Map<String, dynamic>;
-                        return _profBtn(data['nome'] ?? 'Prof', d.id);
-                      }).toList()
-                    ],
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-            // --- Row of Cards ---
-            Row(
-              children: [
-                _card("Hoje", totalHoje, Icons.today, Colors.blue),
-                _card("Semana", totalSemana, Icons.calendar_view_week, Colors.orange),
-                _card("Total", totalGeral, Icons.attach_money, Colors.green),
-              ],
-            ),
-            // --- Graph Bar ---
-            Container(
-              height: 120,
-              margin: const EdgeInsets.symmetric(vertical: 20),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _bar(totalHoje),
-                  _bar(totalSemana),
-                  _bar(totalGeral),
-                ],
-              ),
-            ),
-            const Text(
-              "Faturamento",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 10),
-            StreamBuilder<QuerySnapshot>(
-              stream: db
-                  .collection('tenants')
-                  .doc(user!.uid)
-                  .collection('financeiro_cache')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final docs = snapshot.data!.docs;
-
-                if (docs.isEmpty) {
-                  return const Text("Nenhum faturamento ainda");
-                }
-
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: docs.length,
-                  itemBuilder: (context, i) {
-                    final data = docs[i].data() as Map<String, dynamic>;
-
-                    final nome = data['clienteNome'] ?? 'Cliente';
-                    final valor = (data['valor'] ?? 0).toDouble();
-                    final servico = data['servico'] ?? 'Serviço';
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  nome,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  servico,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Text(
-                            "R\$ ${valor.toStringAsFixed(2)}",
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Colors.green,
-                            ),
-                          )
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: _fecharCaixa,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text("Fechar Caixa"),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              "Histórico de Caixa",
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            StreamBuilder<QuerySnapshot>(
-              stream: db
-                  .collection('tenants')
-                  .doc(user!.uid)
-                  .collection('financeiro')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const SizedBox();
-                }
-
-                final docs = snapshot.data!.docs;
-
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: docs.length,
-                  itemBuilder: (context, i) {
-                    final doc = docs[i];
-                    final data = doc.data() as Map<String, dynamic>;
-
-                    return ListTile(
-                      title: Text("R\$ ${data['totalHoje']}"),
-                      subtitle: Text(data['data'].toDate().toString()),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.refresh, color: Colors.green),
-                            onPressed: () async {
-                              final dataMap = doc.data() as Map<String, dynamic>;
-                              final valor = (dataMap['totalHoje'] ?? 0).toDouble();
-
-                              await db
-                                  .collection('tenants')
-                                  .doc(user!.uid)
-                                  .collection('financeiro_cache')
-                                  .add({
-                                'valor': valor,
-                                'clienteNome': 'Reabertura',
-                                'servico': 'Caixa reaberto',
-                                'data': Timestamp.now(),
-                              });
-
-                              await doc.reference.delete();
-                              _calcularTotais();
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () async {
-                              await doc.reference.delete();
-                            },
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // --- Helper: Period Filter Button ---
-  Widget _filtroPeriodoBtn(String label, String value) {
-    final ativo = periodo == value;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          periodo = value;
-        });
-        _calcularTotais();
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: ativo ? Colors.black : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(color: ativo ? Colors.white : Colors.black),
-        ),
-      ),
-    );
-  }
-
-  // --- Helper: Professional Filter Button ---
-  Widget _profBtn(String nome, String id) {
-    final ativo = profissionalFiltro == id;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          profissionalFiltro = id;
-        });
-        _calcularTotais();
-      },
-      child: Container(
-        margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: ativo ? Colors.green : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(nome, style: TextStyle(color: ativo ? Colors.white : Colors.black)),
-      ),
-    );
-  }
-
-  // --- Helper: Bar Widget for Graph ---
-  Widget _bar(double value) {
-    final maxValue = [totalHoje, totalSemana, totalGeral].reduce((a, b) => a > b ? a : b);
-    final normalizedMax = maxValue == 0 ? 1 : maxValue;
-
-    final height = (value / normalizedMax) * 100;
-
-    return Container(
-      width: 30,
-      height: height.clamp(10, 100),
-      decoration: BoxDecoration(
-        color: Colors.green,
-        borderRadius: BorderRadius.circular(6),
-      ),
-    );
-  }
-}
 
 class MarketplacePage extends StatelessWidget {
   const MarketplacePage({super.key});

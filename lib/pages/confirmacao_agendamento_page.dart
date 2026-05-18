@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 
 class ConfirmacaoAgendamentoPage extends StatelessWidget {
   final String nome;
@@ -51,8 +52,12 @@ class ConfirmacaoAgendamentoPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text("Agendamento"),
+        backgroundColor: const Color.fromARGB(255, 255, 251, 251),
+        title: Image.asset(
+          'assets/horix2.png',
+          height: 80,
+          fit: BoxFit.contain,
+        ),
         centerTitle: true,
       ),
       body: Padding(
@@ -93,6 +98,21 @@ class ConfirmacaoAgendamentoPage extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            Transform.translate(
+              offset: const Offset(0, 39),
+              child: SizedBox(
+                height: 170,
+                width: 400,
+                child: Lottie.asset(
+                  'assets/lottie/Schedule.json',
+                  repeat: true,
+                  fit: BoxFit.contain,
+                ),
               ),
             ),
 
@@ -142,11 +162,13 @@ class ConfirmacaoAgendamentoPage extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.black,
                   padding: const EdgeInsets.symmetric(vertical: 16),
+                  foregroundColor: Colors.white
                 ),
                 onPressed: () {
                   Navigator.pop(context);
                 },
-                child: const Text("Voltar"),
+                child: const Text("Voltar"), 
+                                  
               ),
             ),
           ],
